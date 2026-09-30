@@ -1,0 +1,72 @@
+.header-theme button{cursor:pointer}
+.header-theme button:hover{background:#e9edfb;color:#1428ff}
+:root[data-theme=dark]{
+ color-scheme:dark;
+ --background:#4e4e4e;--foreground:#e8e8ed;--card:#363638;--card-foreground:#e8e8ed;
+ --popover:#404044;--popover-foreground:#e8e8ed;--primary:#a5b3ff;--secondary:#424248;
+ --secondary-foreground:#dce3ff;--muted:#252f43;--muted-foreground:#a6b3c9;
+ --accent:#2b3654;--accent-foreground:#c5cfff;--border:#62626a;--input:#62626a;--ring:#a5b3ff;
+ --gold:#a5b3ff;--night-panel:#363638;--night-raised:#424248;--night-muted:#c3c3d0;--night-accent:#b6bdff;
+ background:var(--background);color:var(--foreground);
+}
+[data-theme=dark] body{background:var(--background)}
+[data-theme=dark] body::before{filter:invert(1) brightness(.6) contrast(4) brightness(.5);mix-blend-mode:normal;opacity:1}
+[data-theme=dark] .topbar{background:#303032;border-color:var(--border)}
+[data-theme=dark] :is(.brand,.menu-toggle,.page-heading .eyebrow,.topbar nav button.active){color:var(--night-accent)}
+[data-theme=dark] .topbar nav button{color:var(--night-muted)}
+[data-theme=dark] .topbar nav button.active{border-color:var(--night-accent)}
+[data-theme=dark] .header-theme{background:#202939}
+[data-theme=dark] .header-theme button{color:#a6b3c9}
+[data-theme=dark] .header-theme button[aria-pressed=true]{background:#354264;color:#dde4ff;box-shadow:none}
+[data-theme=dark] .header-theme button:hover{background:#2a3550}
+[data-theme=dark] .header-resource{color:var(--night-muted)}
+[data-theme=dark] .header-resource-panel{background:var(--night-panel);color:var(--foreground)}
+[data-theme=dark] .header-resource-panel button{background:var(--night-raised);color:var(--night-muted)}
+[data-theme=dark] .story-menu{background:#202d59}
+[data-theme=dark] .menu-backdrop{background:#03071199}
+[data-theme=dark] :is(.search,.filter-cycle,.back-link,.card-character-filter,.directory-card-grid>.directory-group,.updates-card,.work-editor,.work-tasks a,.work-page .work-tasks .work-task-option,.card-lightbox){background:var(--night-panel);color:var(--foreground);border-color:var(--border)}
+[data-theme=dark] :is(.search input,.directory-toggle,.directory-story,.work-row textarea,.work-toolbar input,.work-login input){color:var(--foreground)}
+[data-theme=dark] input::placeholder,[data-theme=dark] textarea::placeholder{color:#97a5be;opacity:1}
+[data-theme=dark] :is(.directory-group-body,.directory-group-body>.directory-group,.directory-story,.updates-chapters,.updates-chapters li,.character-group-options,.card-trait-filters,.work-row,.work-rows,.work-editor-actions){border-color:var(--border)}
+[data-theme=dark] :is(.directory-toggle:hover,.directory-story:hover,.updates-card summary:hover,.filter-cycle:hover,.character-group-options button:hover,.chibi-character:hover,.card-trait-icon:hover,.work-editor button:hover,.work-page button:hover){background:#29344b;color:var(--foreground)}
+[data-theme=dark] :is(.directory-kicker,.updates-category,.directory-chevron,.card-trait-reset,.updates-links a,.updates-intro a){color:var(--night-accent)}
+[data-theme=dark] :is(.list-heading h3 small,.directory-story-title small,.directory-story-number,.directory-story-meta,.directory-story-meta>span:first-child,.updates-results,.updates-meta,.updates-card summary time,.updates-chapter-link small,.updates-intro,.updates-select,.card-trait-label,.character-group-options button,.chibi-character,.story-id,.empty,footer){color:var(--night-muted)}
+[data-theme=dark] .event-switch{background:#202b40}
+[data-theme=dark] .event-switch button{color:#bac5dc}
+[data-theme=dark] .event-switch button[aria-pressed=true]{background:#344364;color:#e2e8ff;box-shadow:none}
+[data-theme=dark] :is(.event-cover-placeholder,.updates-cover-placeholder){background:#232d42;color:#94a5d0;border-color:var(--border)}
+[data-theme=dark] :is(.card-trait-icon,.lightbox-stages button,.lightbox-toolbar button,.updates-pagination button){background:var(--night-raised);border-color:var(--border);color:var(--foreground)}
+[data-theme=dark] .card-trait-icon.trait-vocal{color:#f187a1}
+[data-theme=dark] .card-trait-icon.trait-dance{color:#79b0ff}
+[data-theme=dark] .card-trait-icon.trait-visual{color:#e1bd55}
+[data-theme=dark] .card-sp-filter{color:#aaaeb9}
+[data-theme=dark] :is(.character-group-options button,.chibi-character,.card-trait-icon,.lightbox-stages button)[aria-pressed=true]{background:#2b3656;border-color:#9eacff;color:#cbd4ff}
+[data-theme=dark] .card-trait-icon.trait-vocal[aria-pressed=true]{color:#f187a1}
+[data-theme=dark] .card-trait-icon.trait-dance[aria-pressed=true]{color:#79b0ff}
+[data-theme=dark] .card-trait-icon.trait-visual[aria-pressed=true]{color:#e1bd55}
+[data-theme=dark] .card-sp-filter[aria-pressed=true]{color:#aaaeb9}
+[data-theme=dark] .character-group-logo span{filter:brightness(0) invert(.85)}
+[data-theme=dark] .chibi-all,[data-theme=dark] .chibi-character[aria-pressed=true] .chibi-all{color:var(--night-accent)}
+[data-theme=dark] .status-tag,[data-theme=dark] .updates-pending,[data-theme=dark] .update-kind.modified{background:#383323;color:#e8ce90}
+[data-theme=dark] .directory-story-meta .status-tag{background:transparent;color:#c1cbe0}
+[data-theme=dark] .directory-story-meta .status-tag.human{color:#e8ce90}
+[data-theme=dark] .directory-story-meta .status-tag.completed,[data-theme=dark] .update-kind.added{color:#8ed6ba}
+[data-theme=dark] .update-kind.added{background:#213d36}
+[data-theme=dark] .work-row textarea{background:#141c2a;border-color:var(--border)}
+[data-theme=dark] :is(.work-collaboration,.completion-stats){background:#202b40;border-color:var(--border)!important;--gold:#a5b3ff}
+[data-theme=dark] :is(.work-tasks a,.work-task-option){border-color:var(--border)!important}
+[data-theme=dark] :is(.work-editor button,.work-page button,.work-button,.work-toolbar input,.work-login input,.translation-ruby input){border-color:#4c5d7a}
+[data-theme=dark] :is(.work-editor .work-primary,.work-editor button[aria-pressed=true],.work-page button[aria-pressed=true]){background:#2b3c60;color:#d4dfff;border-color:#8da4db}
+[data-theme=dark] :is(.work-notice,.work-original .work-speaker small,.back-link){color:#a5c4f3}
+[data-theme=dark] .work-speaker-avatar{background:#2d3950;border-color:var(--border)}
+[data-theme=dark] .work-error{color:#ffb8bd;background:#5d30384d}
+[data-theme=dark] .work-row .row-validation{color:#ffafb7}
+[data-theme=dark] .work-voice small{color:#dfba80}
+[data-theme=dark] .completion-table :is(th,td){border-color:var(--border)}
+[data-theme=dark] .card-lightbox::backdrop{background:#030711d9}
+[data-theme=dark] :is(.filterbar select,.work-page select,.work-editor select){background-color:var(--night-raised);color:var(--foreground);border-color:#4c5d7a}
+[data-theme=dark] select option{background:var(--night-panel);color:var(--foreground)}
+[data-theme=dark] .updates-tabs button{background:var(--night-panel);color:var(--night-muted);border-color:var(--border)}
+[data-theme=dark] .updates-tabs button[aria-pressed=true]{background:#344364;color:#e2e8ff;border-color:#8598d4}
+/* Preserve the requested white backing and original colors of game artwork. */
+[data-theme=dark] .character-portrait-preview,[data-theme=dark] .character-portrait-preview>.card-preview{background:#fff}

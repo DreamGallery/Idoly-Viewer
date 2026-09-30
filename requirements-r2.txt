@@ -1,0 +1,3 @@
+-r requirements-assets.txt
+-r requirements-audio.txt
+boto3>=1.43,<2

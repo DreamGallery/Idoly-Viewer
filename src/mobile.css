@@ -1,0 +1,55 @@
+/* Let long resource names wrap without widening the page. */
+.work-row>div,.work-original,.work-toolbar label{min-width:0}
+.work-original p,.work-notice,.work-error,.work-login,.lightbox-toolbar>span{overflow-wrap:anywhere}
+.search{min-width:0}
+.card-lightbox>img,.card-lightbox>video{max-width:100%}
+@media(max-width:700px){
+ .header-theme button{width:36px;height:36px;min-width:36px;min-height:36px}
+ .header-theme{padding:2px;gap:0}
+ .topbar{padding-left:16px;padding-right:16px}
+ .topbar nav{gap:22px;width:100%;justify-content:center}
+ .topbar nav button{padding:0 3px;min-height:44px;font-size:12px;letter-spacing:0;gap:5px}
+ .menu-toggle{min-height:44px;gap:9px}
+ .header-left{gap:16px}
+ .menu-toggle>span:last-child{width:43px}
+ .brand-block .brand svg{width:124px}
+ .header-resource summary{min-height:22px}
+ .header-resource-panel{left:-60px}
+ .filter-options{width:100%}
+ .filter-cycle{flex:1;min-width:0;min-height:44px}
+ .event-switch button{min-height:44px}
+ .character-group-options{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;padding-bottom:10px}
+ .character-group-options button{flex:0 0 66px}
+ .chibi-character-options{display:grid;grid-template-rows:repeat(2,auto);grid-auto-flow:column;grid-auto-columns:74px;overflow-x:auto;scrollbar-width:thin;padding-bottom:8px}
+ .work-editor input:not([type=range]),.work-editor textarea,.work-page input,.filterbar input{font-size:16px}
+ .work-page select,.work-editor select,.filterbar select{font-size:16px;max-width:100%;min-height:44px}
+ .work-page .work-toolbar label{flex-wrap:wrap;gap:6px}
+ .work-page .work-toolbar{gap:10px}
+ .work-editor button,.work-page button,.work-button{min-height:44px}
+ .work-editor .work-voice .work-voice-toggle{width:44px;height:44px}
+ .work-row{grid-template-columns:minmax(0,1fr)}
+ .work-editor h2,.editor-shell h1{overflow-wrap:anywhere}
+ .work-editor .work-toolbar input{width:100%;min-width:0}
+ .work-editor-actions>.work-toolbar{justify-content:flex-start}
+ .work-login{gap:10px;flex-wrap:wrap}
+ .updates-select{flex:1 1 140px;flex-wrap:wrap;gap:6px}
+ .updates-select select{width:100%;max-width:none}
+ .updates-pagination button{width:44px;height:44px}
+ .updates-tabs button{min-height:44px}
+ .lightbox-stages button{min-height:44px}
+ .card-lightbox{max-width:calc(100vw - 24px);padding:12px}
+ .card-lightbox .lightbox-toolbar{gap:12px}
+ .card-lightbox .lightbox-toolbar button{min-width:44px;min-height:44px;align-items:center;justify-content:center}
+}
+@media(max-width:360px){
+ .topbar{padding-left:12px;padding-right:12px}
+ .header-left{gap:10px}
+ .brand-block .brand svg{width:106px}
+ .menu-toggle{font-size:11px;gap:6px}
+ .menu-toggle>span:last-child{width:38px}
+ .topbar nav{gap:16px}
+ .topbar nav svg{display:none}
+ .card-character-filter{padding:10px}
+ .chibi-character-options{gap:6px 2px}
+ .chibi-character{width:72px}
+}

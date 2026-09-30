@@ -1,0 +1,23 @@
+name: idoly-r2-updater
+services:
+  updater:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.updater
+    image: idoly-r2-updater:local
+    platform: linux/amd64
+    restart: unless-stopped
+    init: true
+    env_file: .env.r2.local
+    environment:
+      IDOLY_RUNTIME_ROOT: /runtime
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - runtime:/runtime
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+volumes:
+  runtime:

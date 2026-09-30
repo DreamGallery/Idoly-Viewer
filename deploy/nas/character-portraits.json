@@ -1,0 +1,729 @@
+{
+  "ktn": {
+    "page": "https://idolypride.jp/character/kotono-nagase/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/ktn-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c1_main_b_pc.png",
+        "sha256": "1f7962e1a2dea8f7669431a14fe9d1381ba802c69f19944fd1d932c0a31f9b28",
+        "dimensions": [
+          696,
+          1534
+        ],
+        "alphaBounds": [
+          84,
+          2,
+          531,
+          1532
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/ktn-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c1_main_a2_pc.png",
+        "sha256": "74b9ccbda6a0cab47df74dcfe32fbc32c4d2b1a71c2585fd5464ef9ccc0010de",
+        "dimensions": [
+          696,
+          1575
+        ],
+        "alphaBounds": null
+      }
+    ]
+  },
+  "ngs": {
+    "page": "https://idolypride.jp/character/nagisa-ibuki/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/ngs-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c4_main_b_pc.png",
+        "sha256": "2599634d93122f90431ae55211a57448383993f2ac3dae7e2959bec026385314",
+        "dimensions": [
+          739,
+          1527
+        ],
+        "alphaBounds": [
+          183,
+          27,
+          533,
+          1500
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/ngs-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c4_main_a2_pc.png",
+        "sha256": "e571c3312b10965626a89ceb82481cee5e2ecb030ee0505ac66b4bd451eb4eb4",
+        "dimensions": [
+          739,
+          1531
+        ],
+        "alphaBounds": null
+      }
+    ]
+  },
+  "ski": {
+    "page": "https://idolypride.jp/character/saki-shiraishi/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/ski-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c6_main_b_pc.png",
+        "sha256": "5738e6882b950b936b351402947aefa6233bef383f6c8e4c265a3d59e64657a8",
+        "dimensions": [
+          871,
+          1558
+        ],
+        "alphaBounds": [
+          370,
+          15,
+          722,
+          1552
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/ski-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c6_main_a2_pc.png",
+        "sha256": "4b8393b77534dfdf53a9b6ed5b27d76b48a2bd0d402c0b774f7a4cb4a16fbdde",
+        "dimensions": [
+          871,
+          1561
+        ],
+        "alphaBounds": null
+      }
+    ]
+  },
+  "suz": {
+    "page": "https://idolypride.jp/character/suzu-narumiya/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/suz-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c8_main_b_pc.png",
+        "sha256": "f9aed57df34e18109224468bd801d88433e92fe201254248ace32a360cd2939d",
+        "dimensions": [
+          723,
+          1401
+        ],
+        "alphaBounds": [
+          59,
+          2,
+          677,
+          1392
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/suz-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c8_main_a2_pc.png",
+        "sha256": "8eb0aa9c3cae032250459ef0a62f5cbc454dad3e9758982e9f876723037d84f2",
+        "dimensions": [
+          725,
+          1408
+        ],
+        "alphaBounds": null
+      }
+    ]
+  },
+  "mei": {
+    "page": "https://idolypride.jp/character/mei-hayasaka/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/mei-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c9_main_b_pc.png",
+        "sha256": "0a86b444f37e9fa191d5b25b31c60245eb302b0ff438ee2dc73a0430a4b1422d",
+        "dimensions": [
+          673,
+          1559
+        ],
+        "alphaBounds": [
+          64,
+          21,
+          573,
+          1531
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/mei-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c9_main_a2_pc.png",
+        "sha256": "c06c64e81cdeb6613b74606370202e304e6c3407cb3e1eb2b9b13aa47a86f98a",
+        "dimensions": [
+          673,
+          1572
+        ],
+        "alphaBounds": null
+      }
+    ]
+  },
+  "skr": {
+    "page": "https://idolypride.jp/character/sakura-kawasaki/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/skr-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c2_main_b_pc.png",
+        "sha256": "6a3e5123b6fc6924098f9c95022cde7d08836f977c8358f9c7cf319e5baa537d",
+        "dimensions": [
+          685,
+          1634
+        ],
+        "alphaBounds": [
+          144,
+          124,
+          540,
+          1616
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/skr-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c2_main_a2_pc.png",
+        "sha256": "bf4d8f785ad2a1ed37c882c58c649238bfc582d2373ba826ded78f4ca1db70d1",
+        "dimensions": [
+          685,
+          1642
+        ],
+        "alphaBounds": null
+      }
+    ]
+  },
+  "szk": {
+    "page": "https://idolypride.jp/character/shizuku-hyodo/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/szk-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c10_main_b_pc.png",
+        "sha256": "60773637a947f09e3c4e61f79b0bea230394377ba9486ba56cedbc8e6c28cb93",
+        "dimensions": [
+          745,
+          1537
+        ],
+        "alphaBounds": [
+          57,
+          64,
+          622,
+          1536
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/szk-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c10_main_a2_pc.png",
+        "sha256": "23c5f595eedb3dc5c152b82e575d1aba9baeea6b31262ee86fd8ea1983eea66c",
+        "dimensions": [
+          745,
+          1540
+        ],
+        "alphaBounds": null
+      }
+    ]
+  },
+  "chs": {
+    "page": "https://idolypride.jp/character/chisa-shiraishi/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/chs-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c7_main_b_pc.png",
+        "sha256": "b238748e50117d03b049b8ef764d9fe44fd5e070bb78196d1e7b6e501d3d17a6",
+        "dimensions": [
+          662,
+          1438
+        ],
+        "alphaBounds": [
+          109,
+          3,
+          499,
+          1437
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/chs-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c7_main_a2_pc.png",
+        "sha256": "141b35834db7352771422af0752dcd1d70c1cb49e63be6c4b0bd31fd01f52a89",
+        "dimensions": [
+          662,
+          1462
+        ],
+        "alphaBounds": null
+      }
+    ]
+  },
+  "rei": {
+    "page": "https://idolypride.jp/character/rei-ichinose/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/rei-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c3_main_b_pc.png",
+        "sha256": "7789802073ecb70a8c6c0b58fa9910851b017167ef9af3e6da08a63463a84fb8",
+        "dimensions": [
+          663,
+          1592
+        ],
+        "alphaBounds": [
+          20,
+          32,
+          582,
+          1560
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/rei-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c3_main_a2_pc.png",
+        "sha256": "67c63e0b5a24ac7dedd9ee14b813bc34d73a7b3d4401c217d0960b9d4524adf5",
+        "dimensions": [
+          699,
+          1592
+        ],
+        "alphaBounds": null
+      }
+    ]
+  },
+  "hrk": {
+    "page": "https://idolypride.jp/character/haruko-saeki/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/hrk-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c5_main_b_pc.png",
+        "sha256": "374b65b8e7fab1a25fb80c74f3d5af3720987a618f9a1231ef01bc7b732f6314",
+        "dimensions": [
+          717,
+          1619
+        ],
+        "alphaBounds": [
+          108,
+          45,
+          599,
+          1609
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/hrk-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c5_main_a2_pc.png",
+        "sha256": "f619ed387b10939ef17c3535dd5b03a0278d87bf205bbff98aedefa807b458d8",
+        "dimensions": [
+          717,
+          1619
+        ],
+        "alphaBounds": null
+      }
+    ]
+  },
+  "rui": {
+    "page": "https://idolypride.jp/character/rui-tendo/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/rui-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c11_main_b_pc.png",
+        "sha256": "3281df8182eded9cb29ddc7a5ab89ff4a526f80df9c1ce2ee1083901a3a4e6b8",
+        "dimensions": [
+          880,
+          1580
+        ],
+        "alphaBounds": [
+          211,
+          123,
+          797,
+          1564
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/rui-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c11_main_a_pc.png",
+        "sha256": "b6fc2e7139c43c2c2eea4960914dea9474c23cf51eacb88eaf597b9af9706bd7",
+        "dimensions": [
+          880,
+          1580
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          880,
+          1580
+        ]
+      }
+    ]
+  },
+  "yu": {
+    "page": "https://idolypride.jp/character/yu-suzumura/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/yu-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c13_main_b_pc.png",
+        "sha256": "a0f15a393e1845f3973f9e27d7d2c29ce0e1f79d6865cb89245464acc4a1ca2a",
+        "dimensions": [
+          740,
+          1502
+        ],
+        "alphaBounds": [
+          188,
+          39,
+          544,
+          1502
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/yu-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c13_main_a_pc.png",
+        "sha256": "5bb3cbbbf84845675401ff80f7383ab1e9f511e1850421f57ea800282c740af9",
+        "dimensions": [
+          740,
+          1502
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          740,
+          1502
+        ]
+      }
+    ]
+  },
+  "smr": {
+    "page": "https://idolypride.jp/character/sumire-okuyama/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/smr-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c12_main_b_pc.png",
+        "sha256": "fb0ffbc512865621b5f71d5637fa899b1d1b4c5af95a06e75472a8b4f92370f5",
+        "dimensions": [
+          886,
+          1485
+        ],
+        "alphaBounds": [
+          164,
+          35,
+          853,
+          1484
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/smr-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c12_main_a_pc.png",
+        "sha256": "e90db4a49ea7fe1eaa2c418acd4b1d85b71c6f9499943c6029d816c3dd32e5c4",
+        "dimensions": [
+          886,
+          1485
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          886,
+          1485
+        ]
+      }
+    ]
+  },
+  "rio": {
+    "page": "https://idolypride.jp/character/rio-kanzaki/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/rio-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c14_main_b_pc.png",
+        "sha256": "3a46169a81f22b5dbc4ebe7269221b7a90a010b26921b725ea35d0e27b7f879d",
+        "dimensions": [
+          655,
+          1491
+        ],
+        "alphaBounds": [
+          0,
+          2,
+          654,
+          1489
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/rio-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c14_main_a_pc.png",
+        "sha256": "cc676521c9652f4d44c0fc2a765a0bb28a2d3f68756d1a6e7f64c4942af14c1a",
+        "dimensions": [
+          520,
+          1491
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          520,
+          1491
+        ]
+      }
+    ]
+  },
+  "aoi": {
+    "page": "https://idolypride.jp/character/aoi-igawa/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/aoi-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c15_main_b_pc.png",
+        "sha256": "fe855013c80030c9fc15bf3212e946cbfde7a3ed1ac4f7558cf575ace5ddc63e",
+        "dimensions": [
+          551,
+          1486
+        ],
+        "alphaBounds": [
+          3,
+          1,
+          547,
+          1486
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/aoi-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c15_main_a_pc.png",
+        "sha256": "5967b3000e3629807f1befebc813295dbf3fc425c9016ddd5ed60416b21c6721",
+        "dimensions": [
+          511,
+          1486
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          511,
+          1486
+        ]
+      }
+    ]
+  },
+  "ai": {
+    "page": "https://idolypride.jp/character/ai-komiyama/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/ai-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c16_main_b_pc.png",
+        "sha256": "c94abd94cc6f09529e770fd6e7e614b86a8b0e0c2e926729d304c1127dacbaf6",
+        "dimensions": [
+          598,
+          1546
+        ],
+        "alphaBounds": [
+          7,
+          4,
+          569,
+          1546
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/ai-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c16_main_a_pc.png",
+        "sha256": "d7d8f1b746ba7f323e2111db153228149acdde4ae42c5dee0454fec0e7f9ad75",
+        "dimensions": [
+          598,
+          1546
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          598,
+          1546
+        ]
+      }
+    ]
+  },
+  "kkr": {
+    "page": "https://idolypride.jp/character/kokoro-akazaki/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/kkr-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c17_main_b_pc.png",
+        "sha256": "6641b35653adbe6f4f1ef9230322dbfb9dce5b216ad9cf6fb9c6f4dbb3f4c034",
+        "dimensions": [
+          564,
+          1471
+        ],
+        "alphaBounds": [
+          65,
+          45,
+          499,
+          1469
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/kkr-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c17_main_a_pc.png",
+        "sha256": "48230dadb37c69fdbf76ce7d9a39577674c6c9e5544efdc7acb34fbc209b04d3",
+        "dimensions": [
+          564,
+          1471
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          564,
+          1471
+        ]
+      }
+    ]
+  },
+  "kor": {
+    "page": "https://idolypride.jp/character/fran/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/kor-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c19_main_b_pc.png",
+        "sha256": "9238cd6a856be8d0a00d666fb7d1a23769f0d5993529c59586620dcb05be9cb6",
+        "dimensions": [
+          628,
+          1641
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          628,
+          1641
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/kor-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c19_main_a_pc.png",
+        "sha256": "9fc87442cc0a9509821545470ea94221a49af7a231f178ea81149f3552690706",
+        "dimensions": [
+          618,
+          1638
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          618,
+          1638
+        ]
+      }
+    ]
+  },
+  "kan": {
+    "page": "https://idolypride.jp/character/kana/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/kan-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c20_main_b_pc.png",
+        "sha256": "a73222b5f7bb62fcde7c32caaeadc5045e4b5253f517a11e585e2e9795f37425",
+        "dimensions": [
+          515,
+          1572
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          515,
+          1572
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/kan-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c20_main_a_pc.png",
+        "sha256": "bf70315edf6ffe525f5fb448f58e44daaa50feead047ca258e57542d1f256e66",
+        "dimensions": [
+          640,
+          1449
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          640,
+          1449
+        ]
+      }
+    ]
+  },
+  "mhk": {
+    "page": "https://idolypride.jp/character/miho/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/mhk-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c21_main_b_pc.png",
+        "sha256": "e91cd56ee77f726ca09333e8ab5d5329f9b1b5bef4dd3568dbe88e1f9330e1b2",
+        "dimensions": [
+          552,
+          1639
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          552,
+          1639
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/mhk-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c21_main_a_pc.png",
+        "sha256": "619c6581ae42eb90fd2c16ece5924b159fb20985a9ba39f26a3a04b7af6c39fb",
+        "dimensions": [
+          844,
+          1589
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          844,
+          1589
+        ]
+      }
+    ]
+  },
+  "mna": {
+    "page": "https://idolypride.jp/character/mana-nagase/",
+    "images": [
+      {
+        "url": "/images/characters/portraits/mna-casual.png",
+        "label": "常服",
+        "source": "https://idolypride.jp/shared/img/character/c18_main_b_pc.png",
+        "sha256": "e48ec36a420c37ebfa3c9cc74bdf43fd7b0c473433f54a91afd130c09fa1163b",
+        "dimensions": [
+          717,
+          1469
+        ],
+        "alphaBounds": [
+          113,
+          10,
+          603,
+          1463
+        ]
+      },
+      {
+        "url": "/images/characters/portraits/mna-stage.png",
+        "label": "演出服",
+        "source": "https://idolypride.jp/shared/img/character/c18_main_a_pc.png",
+        "sha256": "1bec3acdc97051d9a208d59c50a7e4cb4843348dd1343e4da4748a71b3b09074",
+        "dimensions": [
+          717,
+          1469
+        ],
+        "alphaBounds": [
+          0,
+          0,
+          717,
+          1469
+        ]
+      }
+    ]
+  }
+}

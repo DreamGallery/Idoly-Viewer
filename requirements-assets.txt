@@ -1,0 +1,4 @@
+-r requirements.txt
+requests==2.34.2
+UnityPy==1.25.3
+Pillow==12.3.0

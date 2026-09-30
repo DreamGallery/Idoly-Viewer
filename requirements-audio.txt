@@ -1,0 +1,4 @@
+-r requirements.txt
+requests==2.34.2
+pycryptodome==3.23.0
+protobuf==6.33.6

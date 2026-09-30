@@ -1,0 +1,2 @@
+import {csvText,editorText,lineLengths} from './text-format';
+export function TranslationInput({value,index,disabled,onChange}:{value:string;index:number;disabled:boolean;onChange:(value:string)=>void}){const lengths=lineLengths(value);return <div className="translation-input"><div className="translation-tools"><span>{lengths.join(' / ')} 字</span></div><textarea aria-label={`第 ${index+1} 行译文`} rows={3} value={editorText(value)} disabled={disabled} placeholder="填写译文，保持与原文相同的换行" onChange={e=>onChange(csvText(e.target.value))}/></div>}

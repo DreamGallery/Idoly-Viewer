@@ -1,0 +1,5 @@
+export type Character={id:string;name:string;originalName:string;enName:string;group:string;color:string;image:string};
+export type Story={id:string;path:string;category:string;title:string;originalTitle:string;characters:string[];lines:number;aiLines:number;humanLines:number;reviewedLines?:number;translationStatus?:'empty'|'human'|'completed';masterId:string|null;references:{table:string;label:string;episode:number}[];sourceHash:string;sourceFileHash:string};
+export type Row={id:string;name:string;text:string;trans:string;ai:string;human:string;reviewed?:string;start:number;end:number;character:string};
+export type Document=Story&{rows:Row[];script:string;metadata:{id:string;name:string;text:string;trans:string}[];names:Record<string,string>};
+export type Catalog={stories:Story[];characters:Character[];groups:{id:string;name:string;color:string;order:number}[];provenance:{revision:string;sourceCommit:string;translationCommit:string;validationWarnings:number;translationMismatches:number}};
