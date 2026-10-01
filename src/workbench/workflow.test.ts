@@ -152,3 +152,32 @@ test('text updates group recognized pending chapters without merging unrelated s
  assert.equal(groupUpdates([row('a',{pending:false,group_title:'同名',character_ids:['hski']}),row('b',{pending:false,group_title:'同名',character_ids:['hume']})]).length,2);
  assert.equal(groupUpdates([row('a',{pending:false,group_id:'one',group_title:'同名'}),row('b',{pending:false,group_id:'two',group_title:'同名'})]).length,2);
 });
+
+test('new-source completion preserves old formal bytes in backup and removes migrated draft atomically',async()=>{
+ const old=csv.replace('metadata','old-source-hash');
+ const updated=csv.replace('metadata','new-source-hash').replace('second','new source');
+ const w=fake({translation:{revision:3,state:'进行中',draft_revision:1},artifacts:{translation_draft:{path:'story/drafts/translation/test.csv',based_on_revision:3}}});
+ const get=w.getContent.bind(w);
+ w.getContent=async(a,b,c,path)=>path==='story/human/test.csv'?{content:b64(old)}:get(a,b,c,path);
+ await completeStage(w,{fileId:'test',role:'tr',sourcePath:'',contentB64:b64(updated),operatorGithub:'me',baseRevision:3});
+ assert.equal(w.written.find(f=>f.path==='story/backups/translation/test.csv')?.content,b64(old));
+ assert.equal(w.written.find(f=>f.path==='story/drafts/translation/test.csv')?.content,null);
+ const formal=Buffer.from(w.written.find(f=>f.path==='story/human/test.csv')!.content!,'base64').toString();
+ assert.ok(formal.includes('new-source-hash'));assert.ok(formal.includes('new source'));
+ const record=JSON.parse(Buffer.from(w.written.find(f=>f.path==='records/test.json')!.content!,'base64').toString());
+ assert.equal(record.translation.revision,4);assert.equal(record.translation.state,'完成');
+ assert.equal(record.translation.draft_revision,0);assert.equal(record.artifacts.translation_draft,undefined);
+});
+
+test('real Unicode task categories survive parsing, draft and completion paths',async()=>{
+ for(const [category,id] of [['サニーピース','adv_group_sun_01_01'],['月のテンペスト','adv_group_moon_01_01'],['ⅢX','adv_group_thrx_01_01']]){
+  const relative=`group/${category}/01/${id}.csv`, sourcePath=`story/ai/${relative}`;
+  const task=docFromIssue({number:1,title:id,body:`<!-- path: ${sourcePath} -->`});
+  assert.equal(task.aiPath,sourcePath);assert.equal(task.translatedPath,`story/human/${relative}`);assert.equal(task.proofreadPath,`story/reviewed/${relative}`);
+  const w=fake({translation:{revision:1,state:'进行中'},artifacts:{}});
+  await saveDraft(w,{fileId:id,role:'tr',sourcePath,contentB64:b64(csv.replace('test.txt',id+'.txt')),operatorGithub:'me'});
+  assert.equal(w.written[0].path,`story/drafts/translation/${relative}`);
+  await completeStage(w,{fileId:id,role:'tr',sourcePath,contentB64:b64(csv.replace('test.txt',id+'.txt')),operatorGithub:'me',baseRevision:1});
+  assert.ok(w.written.some(f=>f.path===`story/human/${relative}`));
+ }
+});

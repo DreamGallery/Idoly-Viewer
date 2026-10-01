@@ -58,6 +58,7 @@ export interface DocTask {
   proofreadPath: string
   tr: Track
   pr: Track
+  createdAt?: string // GitHub Issue 创建时间，即任务发布时间
   updatedAt: string // issue 最后更新时间(ISO)
   sourceCommitTime?: string // 原始文本首次进入源仓库的 commit 时间
   trCsvTime?: string // translated_csv 最后 commit 时间（页面异步填充）
@@ -1248,6 +1249,7 @@ export function docFromIssue(i: any): DocTask {
       stagePathFromAny(legacy, i.title, 'story/reviewed'),
     tr: parseTrack(i.body, 'tr'),
     pr: parseTrack(i.body, 'pr'),
+    createdAt: i.created_at || '',
     updatedAt: i.updated_at || '',
   }
 }

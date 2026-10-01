@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createApp } from './app.mjs';
 const origin = 'http://127.0.0.1:5173';
-async function fixture(t, extra = async () => new Response('{}', {status:404}), push = true) {
+async function fixture(t, extra = async () => new Response('{}', {status:404}), push = true, services = {}) {
   const calls=[];
   const app=createApp({GITHUB_CLIENT_ID:'test-id',GITHUB_CLIENT_SECRET:'test-secret',CAMPUS_PUBLIC_ORIGIN:origin},async (url, opts) => {
     assert.equal(opts.redirect,'manual', 'GitHub requests must use the Workers-compatible non-following redirect mode');
@@ -12,7 +12,7 @@ async function fixture(t, extra = async () => new Response('{}', {status:404}), 
     if(url==='https://api.github.com/repos/DreamGallery/Idoly-localify-translations') return Response.json({permissions:{push}});
     if(url==='https://api.github.com/user')return Response.json({login:'tester',name:'Tester'});
     return extra(url,opts);
-  });
+  }, services);
   app.listen(0,'127.0.0.1');await once(app,'listening');t.after(()=>app.close());
   const base=`http://127.0.0.1:${app.address().port}`;
   const login=await fetch(base+'/api/auth/login?returnTo=%2Fchapter%2Ftest',{redirect:'manual'});
@@ -106,4 +106,50 @@ test('resource archives expose only published downloads and support byte ranges'
  assert.equal((await fetch(base+'/api/resources/download/%2E%2E%2Fsecret')).status,404);
  await rm(join(root,'downloads',filename));await symlink('/etc/hosts',join(root,'downloads',filename));
  assert.equal((await fetch(path)).status,403);
+});
+
+test('source update completion archives only the exact existing formal CSV', async t => {
+ const {createHash}=await import('node:crypto');
+ const b64=s=>Buffer.from(s).toString('base64');
+ const blob=s=>createHash('sha1').update(`blob ${Buffer.byteLength(s)}\0`).update(s).digest('hex');
+ const raw='[narration text=新原文]\n', oldRaw='[narration text=旧原文]\n';
+ const csv=(text,source,id='adv_test')=>`id,name,text,trans\n1:narration:1,,${text},译文\ninfo,${id}.txt,${createHash('sha256').update(source).digest('hex')},\n译者,作者,,\n`;
+ const old=csv('旧原文',oldRaw), next=csv('新原文',raw);
+ for (const role of ['translation','proofread']) await t.test(role,async t=>{
+  const relative='group/サニーピース/01/adv_test.csv';
+  const formal=`story/${role==='translation'?'human':'reviewed'}/${relative}`, backup=`story/backups/${role}/${relative}`;
+  const f=await fixture(t,async(url,opts)=>{
+   if(url.includes('/git/ref/'))return Response.json({object:{sha:'head'}});
+   if(url.includes('/contents/')) {assert.ok(url.endsWith('?ref=head'));return url.includes('/'+formal.split('/').map(encodeURIComponent).join('/')+'?')?Response.json(role==='proofread'?{sha:blob(old),content:'',encoding:'none'}:{sha:blob(old),content:b64(old),encoding:'base64'}):new Response('{}',{status:404});}
+   if(url.endsWith('/git/blobs/'+blob(old)))return Response.json({content:b64(old),encoding:'base64'});
+   if(url.endsWith('/git/commits/head'))return Response.json({tree:{sha:'oldtree'}});
+   if(url.endsWith('/git/blobs'))return Response.json({sha:blob(Buffer.from(JSON.parse(opts.body).content,'base64').toString())});
+   if(url.endsWith('/git/trees'))return Response.json({sha:'tree'});
+   if(url.endsWith('/git/commits'))return Response.json({sha:'commit'});
+   if(url.includes('/git/refs/'))return Response.json({});
+   throw Error('unexpected '+url);
+  },true,{sourceRoots:()=>({adv:'adv'}),readFile:async(_root,path)=>{assert.equal(path,'adv_test.txt');return raw;},sourcePath:async id=>id==='adv_test'?relative:'other.csv'});
+  const run=async(files,status)=>{const before=f.calls.filter(([,o])=>o.method==='POST').length;const r=await f.post('/api/github/commit',{files});assert.equal(r.status,status,await r.clone().text());if(status!==200)assert.equal(f.calls.filter(([,o])=>o.method==='POST').length,before);};
+  const good=[{path:backup,content:b64(old),expectedSha:null},{path:formal,content:b64(next),expectedSha:blob(old)},{path:'records/adv_test.json',content:b64('{}'),expectedSha:null}];
+  await run(good,200);
+  await run([{...good[0],content:b64(old.replace('译文','伪造'))},good[1]],400);
+  await run([{...good[0],content:b64(old.replace('adv_test.txt','adv_other.txt'))},good[1]],400);
+  await run([{...good[0],path:`story/backups/${role}/wrong.csv`},good[1]],400);
+  await run([good[0]],400);
+  await run([good[0],{...good[1],content:b64(old)}],400);
+  await run([good[0],{...good[1],content:b64(next.replace('新原文','篡改原文'))}],400);
+  await run([good[0],{...good[1],expectedSha:'stale'}],409);
+  await run([good[0],good[0],good[1]],400);
+ });
+});
+
+
+test('Unicode story paths are encoded per segment; traversal and markup remain forbidden',async t=>{
+ const paths=['group/サニーピース/01/adv_group_sun_01_01.csv','group/月のテンペスト/01/adv_group_moon_01_01.csv','group/ⅢX/01/adv_group_thrx_01_01.csv'];
+ const f=await fixture(t,async url=>{assert.ok(paths.some(path=>url.endsWith('/contents/story/ai/'+path.split('/').map(encodeURIComponent).join('/')+'?ref=main')));return Response.json({content:'',sha:'existing'});});
+ for(const path of paths)assert.equal((await f.post('/api/github/read',{kind:'content',path:'story/ai/'+path})).status,200);
+ for(const path of ['story/ai/../secret','/story/ai/test.csv','story//test.csv','story/./test.csv','story/ai/%2e%2e/secret','story/ai/サニー\\secret.csv','story/ai/<b>月</b>.csv','story/ai/a\u0000.csv','story/ai/a\u202e.csv','story/ai/a?ref=other','story/ai/a#x']){
+  assert.equal((await f.post('/api/github/read',{kind:'content',path})).status,400,path);
+  assert.equal((await f.post('/api/github/commit',{files:[{path,content:'',expectedSha:null}]})).status,400,path);
+ }
 });

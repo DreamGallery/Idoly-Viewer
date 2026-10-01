@@ -11,7 +11,7 @@ export async function api<T>(path: string, body?: unknown, csrf?: string | null)
 export function encode(text: string) { return btoa(Array.from(new TextEncoder().encode(text), c => String.fromCharCode(c)).join('')); }
 export function decode(text: string) { return new TextDecoder().decode(Uint8Array.from(atob(text.replace(/\s/g, '')), c => c.charCodeAt(0))); }
 interface Content { sha: string; content: string }
-export interface Issue { number: number; title: string; body: string; updated_at: string; pull_request?: unknown; labels?: unknown[] }
+export interface Issue { number: number; title: string; body: string; created_at?: string; updated_at: string; pull_request?: unknown; labels?: unknown[] }
 export class Github {
   baseline = new Map<string, string | null>();
   issues = new Map<number, Issue>();

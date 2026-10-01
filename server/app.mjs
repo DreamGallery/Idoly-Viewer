@@ -34,7 +34,7 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
     if (!await canCollaborate(session)) throw fail(403, '当前账号没有工作仓库的写权限');
   }
   const filePath = (p) => {
-    if (typeof p !== 'string' || p.length > 600 || !/^[a-zA-Z0-9_./-]+$/.test(p) || p.split('/').some(x => !x || x === '.' || x === '..')) throw fail(400, '无效文件路径');
+    if (typeof p !== 'string' || p.length > 600 || !/^[\p{L}\p{M}\p{N}_./-]+$/u.test(p) || p.split('/').some(x => !x || x === '.' || x === '..')) throw fail(400, '无效文件路径');
     return p.split('/').map(encodeURIComponent).join('/');
   };
   const writable = p => /^(records\/[\w-]+\.json|(?:story\/human|story\/reviewed|story\/drafts\/translation|story\/drafts\/proofread|story\/backups\/translation|story\/backups\/proofread)\/.+\.csv|proofread_txt\/[\w-]+\.txt)$/.test(p);
@@ -170,6 +170,9 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
           filePath(f.path);
           if (!writable(f.path) || !(typeof f.content === 'string' || f.content === null) || !(typeof f.expectedSha === 'string' || f.expectedSha === null)) throw fail(400, '提交缺少基准版本或路径不允许');
         }
+        if (new Set(input.files.map(f => f.path)).size !== input.files.length) throw fail(400, '提交包含重复路径');
+        const ref = await gh(session, 'GET', `git/ref/heads/${encodeURIComponent(branch)}`);
+        const head = ref.object.sha;
         // Reject stale source/invalid translation even if the caller bypasses browser validation.
         for (const f of input.files) {
           if (f.content !== null && f.path.endsWith('.csv')) {
@@ -178,16 +181,28 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
               const csv = Buffer.from(f.content, 'base64').toString('utf8');
               parsed = inspectCsv(csv);
               const roots = await sourceRoots();
-              const raw = await localFile(roots.adv, parsed.id + '.txt');
-              validateCsvAgainstScript(csv, raw, {checkLength: !f.path.startsWith('story/drafts/')});
+              const backup = f.path.match(/^story\/backups\/(translation|proofread)\/(.+)$/);
+              if (backup) {
+                const formalPath = `story/${backup[1] === 'translation' ? 'human' : 'reviewed'}/${backup[2]}`;
+                const replacement = input.files.find(item => item.path === formalPath && item.content !== null);
+                if (!replacement || inspectCsv(Buffer.from(replacement.content, 'base64').toString('utf8')).id !== parsed.id) throw new Error('备份必须与同章节正式稿更新一起提交');
+                // Compare exact bytes with the existing Git blob at this transaction's head.
+                // Historical source hashes may differ, but arbitrary historical CSVs are never accepted.
+                const bytes = Buffer.from(f.content, 'base64');
+                const existing = await content(session, formalPath, head);
+                const existingBlob = existing.encoding === 'none' || typeof existing.content !== 'string'
+                  ? await gh(session, 'GET', `git/blobs/${encodeURIComponent(existing.sha)}`) : existing;
+                if (typeof existingBlob.content !== 'string' || !Buffer.from(existingBlob.content, 'base64').equals(bytes)) throw new Error('备份与仓库现有正式稿不一致');
+              } else {
+                const raw = await localFile(roots.adv, parsed.id + '.txt');
+                validateCsvAgainstScript(csv, raw, {checkLength: !f.path.startsWith('story/drafts/')});
+              }
               const manifest = services.sourcePath ? null : JSON.parse(await localFile(roots.web, 'catalog/manifest.json'));
               const relative = services.sourcePath ? await services.sourcePath(parsed.id) : JSON.parse(await localFile(roots.web, manifest.base_path.replace(/^\//, '') + '/chapters/' + parsed.id + '.json')).csv_path;
-              if (!relative || !f.path.endsWith('/' + relative)) throw new Error('提交目录与剧情索引不一致');
+              if (!relative || !['story/human/', 'story/reviewed/', 'story/drafts/translation/', 'story/drafts/proofread/', 'story/backups/translation/', 'story/backups/proofread/'].some(prefix => f.path === prefix + relative)) throw new Error('提交目录与剧情索引不一致');
             } catch (error) { throw fail(400, error.message); }
           }
         }
-        const ref = await gh(session, 'GET', `git/ref/heads/${encodeURIComponent(branch)}`);
-        const head = ref.object.sha;
         for (const f of input.files) if (await shaAt(session, f.path, head) !== f.expectedSha) throw fail(409, `远端 ${f.path} 已更新，请导出本地草稿并重新加载`);
         const commit = await gh(session, 'GET', `git/commits/${head}`);
         const tree = [];
