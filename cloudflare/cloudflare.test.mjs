@@ -240,3 +240,22 @@ test('FLAC streams directly with ranges and HEAD; retired WAV aliases are ignore
  response=await data.route(req('/api/media/voice/voice.flac',{method:'HEAD'}));assert.equal(response.status,200);assert.equal(response.headers.get('Content-Type'),'audio/flac');
  assert.equal(await response.text(),'');assert.equal(response.headers.get('Content-Length'),'14');
 }));
+
+test('music catalog, jacket and FLAC use the same pinned release with ranges',()=>fixture(async bucket=>{
+ const data=resources({RESOURCES:bucket,IDOLY_R2_PREFIX:'music'});
+ const req=(path,init)=>new Request('https://site.test'+path,init);
+ await bucket.put('music/current.json',JSON.stringify({release:'old'}));
+ await assert.rejects(()=>data.route(req('/data/music.json')),{status:404});
+ const audio='media/'+ 'a'.repeat(64)+'/sud_music_short_hsm-001.flac';
+ const cover='media/'+ 'b'.repeat(64)+'/img_music_jacket_hsm-001.webp';
+ const catalog='text/'+ 'c'.repeat(64)+'/music.json';
+ await bucket.put('music/'+audio,'fLaC0123456789');await bucket.put('music/'+cover,'RIFF0123WEBP');
+ await bucket.put('music/'+catalog,JSON.stringify({tracks:[{id:'hsm-001',audio:'/api/media/voice/sud_music_short_hsm-001.flac',cover:'/api/media/image/img_music_jacket_hsm-001.webp'}]}));
+ await bucket.put('music/releases/new/file-map.json',JSON.stringify({schema_version:1,files:{'web/data/music.json':catalog,'media/voice/sud_music_short_hsm-001.flac':audio,'media/image/img_music_jacket_hsm-001.webp':cover}}));
+ await bucket.put('music/current.json',JSON.stringify({release:'new'}));
+ const index=await data.route(req('/data/music.json'));assert.equal(index.headers.get('X-Idoly-Release'),'new');assert.equal((await index.json()).tracks.length,1);
+ await bucket.put('music/current.json',JSON.stringify({release:'future'}));
+ const voice=await data.route(req('/api/media/voice/sud_music_short_hsm-001.flac?release=new',{headers:{Range:'bytes=0-3'}}));
+ assert.equal(voice.status,206);assert.equal(voice.headers.get('Content-Type'),'audio/flac');assert.equal(await voice.text(),'fLaC');
+ const jacket=await data.route(req('/api/media/image/img_music_jacket_hsm-001.webp?release=new'));assert.equal(jacket.status,200);assert.equal(jacket.headers.get('Content-Type'),'image/webp');
+}));

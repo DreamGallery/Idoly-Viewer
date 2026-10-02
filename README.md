@@ -1,11 +1,11 @@
 # 星见事务所 · IDOLY PRIDE 剧情索引
 
-非官方剧情索引与翻译协作网站，基于 [Campus Viewer](https://github.com/DreamGallery/Campus-Viewer) 改造。支持剧情分组、卡牌筛选、文本更新、图片与动态卡面、逐句语音，以及 GitHub 翻译／校对协作。
+非官方剧情索引与翻译协作网站，基于 [Campus Viewer](https://github.com/DreamGallery/Campus-Viewer) 改造。支持剧情分组、卡牌筛选、文本更新、图片与动态卡面、逐句语音、游戏音乐播放器，以及 GitHub 翻译／校对协作。
 
 ## 部署结构
 
 - **Cloudflare Worker**：网页、资源读取、GitHub OAuth 与协作接口。
-- **R2**：索引、剧情文本、图片、语音、动态卡面及最近五个游戏增量包。
+- **R2**：索引、剧情文本、图片、语音、歌曲与封面、动态卡面及最近五个游戏增量包。
 - **D1**：加密登录会话，不保存翻译稿件。
 - **NAS Docker（linux/amd64）**：更新资源、读取 MasterDB、生成索引和增量包、上传 R2。
 
@@ -47,7 +47,7 @@ npm run dev:api:github
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-本地数据准备见 [索引生成说明](docs/indexer.md)，语音解码见 [语音说明](docs/voice-index.md)。本地 GitHub 登录使用 `.env.oauth.local`，回调为 `http://127.0.0.1:5173/api/auth/callback`。`npm run dev:api` 可使用本地演示协作模式。现有本地资源路径和构建参数见 `python scripts/build-idoly-data.py --help` 与 `python -m idoly_story_index.build --help`。
+音乐播放器与本地曲库配置见 [音乐说明](docs/local-music.md)。本地数据准备见 [索引生成说明](docs/indexer.md)，语音解码见 [语音说明](docs/voice-index.md)。本地 GitHub 登录使用 `.env.oauth.local`，回调为 `http://127.0.0.1:5173/api/auth/callback`。`npm run dev:api` 可使用本地演示协作模式。现有本地资源路径和构建参数见 `python scripts/build-idoly-data.py --help` 与 `python -m idoly_story_index.build --help`。
 
 ```sh
 npm run build

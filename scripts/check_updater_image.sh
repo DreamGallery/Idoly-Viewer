@@ -4,7 +4,7 @@ image=${1:?Usage: check_updater_image.sh IMAGE [PLATFORM]}
 platform=${2:-linux/amd64}
 docker run --rm -i --platform "$platform" --entrypoint python "$image" - <<'CHECK'
 import importlib, pathlib, subprocess
-for name in ['requests','UnityPy','PIL','Crypto.Cipher.AES','google.protobuf','boto3','idoly_story_index.runtime','idoly_story_index.publish','idoly_story_index.game_archive','idoly_story_index.master_source']:
+for name in ['requests','UnityPy','PIL','Crypto.Cipher.AES','google.protobuf','boto3','idoly_story_index.runtime','idoly_story_index.publish','idoly_story_index.game_archive','idoly_story_index.master_source','idoly_story_index.music_index','idoly_story_index.textures']:
     importlib.import_module(name)
 importlib.import_module('fmod_toolkit')
 subprocess.run(['flac','--version'],check=True)

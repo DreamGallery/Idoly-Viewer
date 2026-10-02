@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
+// @ts-expect-error Local Node middleware is implemented in JavaScript.
+import { localMusicHandler } from './server/local-music.mjs';
 
 // Serve mounted data directly: Vite's public-file inventory does not reliably
 // discover newly published files inside an external symlink without a restart.
@@ -14,6 +16,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), {
       name: 'campus-local-data',
       configureServer(server) {
+        server.middlewares.use(localMusicHandler(process.cwd(), loadEnv(mode, process.cwd(), 'IDOLY_MUSIC_')));
         server.middlewares.use(async (req, res, next) => {
           const url = req.url || '';
           const folder = url.startsWith('/audio/') ? 'audio' : url.startsWith('/catalog/') ? 'catalog' : url.startsWith('/assets/images/') ? 'assets' : null;

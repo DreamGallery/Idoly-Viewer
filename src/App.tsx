@@ -1,6 +1,6 @@
 import { resourceJson, resourceCatalogBase } from './resource-snapshot';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Users, Library, History, ChevronLeft, ChevronDown, SlidersHorizontal, ArrowDownUp, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CatalogContext } from './catalog';
@@ -15,6 +15,7 @@ import { defaultCardFilters, matchesCardFilters, type CardFilters } from './card
 import CharacterFilter from './CharacterFilter';
 import ResourceVersions from './ResourceVersions';
 import ThemeSwitch from './ThemeSwitch';
+const MusicPlayer = lazy(() => import('./MusicPlayer'));
 const sortOptions = [['default','默认排序'],['newest','从新到旧'],['oldest','从旧到新']] as const;
 const statusOptions = [['all','全部翻译状态'],['empty','待翻译'],['human','待校对'],['completed','已完成']] as const;
 const categories: Record<string,string> = {main:'主线剧情',group:'组合剧情',bond:'羁绊剧情',card:'卡牌剧情',event:'活动剧情',hbd:'生日剧情'};
@@ -85,5 +86,5 @@ export default function App(){
  {category==='card'&&<CharacterFilter data={data} directory={directory} group={group} character={character} onGroupChange={chooseGroup} onCharacterChange={setCharacter} cardFilters={cardFilters} onCardFiltersChange={setCardFilters}/>}
  <div className="filterbar"><label className="search"><Search size={19}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="搜索剧情标题、章节或文件名" aria-label="搜索剧情"/>{query&&<button onClick={()=>setQuery('')} aria-label="清空搜索"><X size={16}/></button>}</label><div className="filter-options"><button type="button" className="filter-cycle" aria-label={'翻译状态：'+statusOptions[statusIndex][1]} title={'点击切换为'+statusOptions[(statusIndex+1)%statusOptions.length][1]} onClick={()=>setStatus(statusOptions[(statusIndex+1)%statusOptions.length][0])}><SlidersHorizontal size={16}/><span>{statusOptions[statusIndex][1]}</span></button>{['card','event'].includes(category)&&<button type="button" className="filter-cycle" aria-label={'排序：'+sortOptions[sortIndex][1]} title={'点击切换为'+sortOptions[(sortIndex+1)%3][1]} onClick={()=>setSortOrder(sortOptions[(sortIndex+1)%3][0])}><ArrowDownUp size={16}/><span>{sortOptions[sortIndex][1]}</span></button>}</div></div>
  <div className="list-heading"><h3>{character?data.characters.find(c=>c.id===character)?.name:categories[category]} <small>{category==='card'?`${filteredCardCount.toLocaleString()} 张卡牌`:`${filtered.length.toLocaleString()} 篇`}</small></h3></div>{directory?<StoryDirectory data={data} directory={directory} filtered={filtered} category={category} openStory={open} owner={character} sortOrder={sortOrder} searchKey={query.trim()}/>:<div className="empty" role="status">正在载入分组索引…</div>}</>}
- <footer><span>非官方剧情索引 · 游戏素材 <a href="https://idolypride.jp/" target="_blank" rel="noreferrer"><strong>© 2019 Project IDOLY PRIDE</strong></a></span></footer></section></main>}</CatalogContext.Provider>;
+ <footer><span>非官方剧情索引 · 游戏素材 <a href="https://idolypride.jp/" target="_blank" rel="noreferrer"><strong>© 2019 Project IDOLY PRIDE</strong></a></span></footer></section></main>}{data&&<Suspense fallback={null}><MusicPlayer/></Suspense>}</CatalogContext.Provider>;
 }

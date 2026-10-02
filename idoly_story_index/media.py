@@ -10,6 +10,7 @@ import warnings
 from .build import ROOT, WORK, load
 from .downloads import download_file
 from .audio import encode_flac
+from .textures import select_texture
 
 
 def select_voice_clips(clips, names):
@@ -71,10 +72,7 @@ def materialize(kind, name, root=ROOT, *, plan=None, cache_root=None, voice_name
     decoded=decrypt_bundle(raw,bank)
     env=UnityPy.load(decoded)
     if kind=='image':
-        candidates=[o.read() for o in env.objects if o.type.name=='Texture2D']
-        exact=[d for d in candidates if d.m_Name==name]
-        if not exact and len(candidates)!=1:raise ValueError('Ambiguous image resource')
-        picture=(exact or candidates)[0].image
+        picture=select_texture(env,name).image
         picture.thumbnail((1600,1600))
         from io import BytesIO
         output=BytesIO();picture.save(output,format='WEBP',quality=88);atomic(target,output.getvalue())

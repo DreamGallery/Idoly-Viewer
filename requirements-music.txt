@@ -1,0 +1,3 @@
+# Optional dependencies for the local music player preview.
+-r requirements-assets.txt
+imageio-ffmpeg==0.6.0

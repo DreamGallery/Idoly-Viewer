@@ -17,6 +17,7 @@ from .build import ROOT, build, load, save
 from .game_archive import prepare_archives
 from .master_source import fetch_master, REPO_PATTERN
 from .media import materialize
+from .music_index import music_index
 from .octo_source import update_manifest
 from .publish import connect, digest, read_current, publish, Progress
 from .downloads import download_bytes
@@ -134,6 +135,21 @@ def materialize_snapshot(root,stage,manifest,workers):
     (web/'data/media-plan.json').unlink()
 
 
+def add_music_snapshot(stage,master,translations,manifest):
+    translated=translations/'master/zh-Hans/Music.json'
+    catalog,music=music_index(manifest,load(master/'Music.json'),load(translated) if translated.exists() else {})
+    if not catalog['tracks']:
+        raise ValueError('No matched game music; check Music.json and Octo manifest')
+    web=stage/'web'
+    plan=load(web/'data/media-plan.json')
+    plan['assets'].update(music['assets'])
+    plan['voices'].update(music['voices'])
+    plan['images']=sorted(set(plan['images'])|set(music['images']))
+    save(web/'data/media-plan.json',plan)
+    save(web/'data/music.json',catalog)
+    print(f"NAS: indexed {len(catalog['tracks'])} songs with game jackets; audio uses verified FLAC 8",flush=True)
+
+
 def build_snapshot(root,stage,master,toolkit,source,translations,manifest,workers=2,with_media=True):
     web=stage/'web';web.mkdir(parents=True,exist_ok=True)
     seed_images(web)
@@ -144,6 +160,7 @@ def build_snapshot(root,stage,master,toolkit,source,translations,manifest,worker
     if load(stage/'data-validation.json')['warnings']:
         raise ValueError('Translated script validation failed; inspect this release data-validation.json before publication')
     build(master,toolkit,source,translations,web/'data',report=stage/'index-report.json',history_cache=None)
+    add_music_snapshot(stage,master,translations,manifest)
     if with_media:materialize_snapshot(root,stage,manifest,workers)
     catalog=load(web/'data/catalog.json')
     for story in catalog['stories']:
