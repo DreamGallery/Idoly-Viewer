@@ -53,9 +53,12 @@ test('batch claim rechecks the latest track and never reopens a completed or own
  }
 });
 test('batch claim preserves the other workflow track',async()=>{
- let update:any;
- const w={getIssue:async()=>({body:'<!-- tr::待认领 -->\n<!-- pr:reviewer:进行中 -->'}),updateIssue:async(_o:string,_r:string,_n:number,p:any)=>{update=p;}};
+ type IssueUpdate = {body:string;state:'open'|'closed'};
+ const updates:IssueUpdate[]=[];
+ const w={getIssue:async()=>({body:'<!-- tr::待认领 -->\n<!-- pr:reviewer:进行中 -->'}),updateIssue:async(_o:string,_r:string,_n:number,p:IssueUpdate)=>{updates.push(p);}};
  await applyTrack(w,1,'tr',{user:'me',state:'进行中'},true);
+ assert.equal(updates.length,1);
+ const update=updates[0];
  assert.match(update.body,/tr:me:进行中/);assert.match(update.body,/pr:reviewer:进行中/);assert.equal(update.state,'open');
 });
 
