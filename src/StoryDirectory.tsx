@@ -5,16 +5,19 @@ import CardPreview, { type CardVideo } from './CardPreview';
 import type { CardTraits } from './card-filters';
 import type { Catalog, Story } from './idoly-types';
 import { isTextOnlyStoryGroup } from './story-presentation';
+import ListPagination from './ListPagination';
 
 export type SortOrder = 'default' | 'newest' | 'oldest';
 export type MediaImage = { url: string; label: string; asset?: string; aspect_ratio?: number };
 type DirectoryNode = { id: string; label: string; parent: string | null; children: string[]; stories: string[]; count: number; sortTime?: number | null; cardTraits?: CardTraits; images: MediaImage[]; videos?: CardVideo[]; portraitCover?: boolean };
 export type Directory = { roots: string[]; nodes: Record<string, DirectoryNode>; stories: Record<string, {group:string;images:MediaImage[];voiceLines:number;indexVisible:boolean}> };
-
+const cardPageSize = 24;
 
 export default function StoryDirectory({ data, directory, filtered, category, openStory, searchKey, owner, sortOrder }: { data: Catalog; directory: Directory; filtered: Story[]; category: string; openStory: (id:string)=>void; searchKey: string; owner?: string; sortOrder: SortOrder }) {
  const [expanded,setExpanded]=useState<Set<string>>(new Set());
  const [eventType,setEventType]=useState('normal');
+ const [page,setPage]=useState(1);
+ useEffect(()=>setPage(1),[category,owner,sortOrder,searchKey,filtered,directory]);
  const canSortByTime=category==='card'||category==='event';
  useEffect(()=>{setExpanded(new Set(searchKey?Object.keys(directory.nodes):[]))},[category,searchKey,directory]);
  const stories=useMemo(()=>new Map(data.stories.map(s=>[s.id,s])),[data]);
@@ -24,7 +27,7 @@ export default function StoryDirectory({ data, directory, filtered, category, op
   const visit=(id:string):number=>{const n=directory.nodes[id];return result[id]=n.stories.filter(s=>matched.has(s)).length+n.children.reduce((sum,k)=>sum+visit(k),0)};
   directory.roots.forEach(visit);return result;
  },[directory,matched]);
- const toggle=(id:string)=>setExpanded(previous=>{const next=new Set(previous);next.has(id)?next.delete(id):next.add(id);return next});
+ const toggle=(id:string)=>setExpanded(previous=>{const next=new Set(previous);if(next.has(id))next.delete(id);else next.add(id);return next});
  let roots=category==='event'?directory.nodes['event:'+eventType]?.children||[]:directory.nodes[category]?.children||[];
  if(category==='card')roots=owner?directory.nodes['card:'+owner]?.children||[]:roots.flatMap(id=>directory.nodes[id].children);
  if(owner&&category==='hbd')roots=directory.nodes['hbd:'+owner]?.children||[];
@@ -35,6 +38,9 @@ export default function StoryDirectory({ data, directory, filtered, category, op
   if(right==null)return -1;
   return sortOrder==='newest'?right-left:left-right;
  });
+ const pages=category==='card'?Math.max(1,Math.ceil(roots.length/cardPageSize)):1;
+ const currentPage=Math.min(page,pages);
+ const visibleRoots=category==='card'?roots.slice((currentPage-1)*cardPageSize,currentPage*cardPageSize):roots;
  function renderNode(id:string,depth=0):React.ReactNode {
   const n=directory.nodes[id];if(!counts[id])return null;
   const isOpen=expanded.has(id);
@@ -69,7 +75,8 @@ export default function StoryDirectory({ data, directory, filtered, category, op
   {category==='event'&&<div className="directory-tools">
    <div className="event-switch" role="group" aria-label="活动剧情类型"><button aria-pressed={eventType==='normal'} onClick={()=>setEventType('normal')}>通常 <small>{counts['event:normal']||0}</small></button><button aria-pressed={eventType==='love'} onClick={()=>setEventType('love')}>特殊 <small>{counts['event:love']||0}</small></button></div>
   </div>}
-  <div className="directory-card-grid">{roots.map(id=>renderNode(id))}</div>
+  <div className="directory-card-grid">{visibleRoots.map(id=>renderNode(id))}</div>
   {!roots.length&&<div className="empty">此分类下没有匹配的剧情</div>}
+  {category==='card'&&<ListPagination page={currentPage} pages={pages} label="卡牌剧情分页" onChange={next=>{setPage(next);window.scrollTo({top:0,left:0,behavior:'instant'})}}/>}
  </section>;
 }

@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowRight, BookOpen, ChevronDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { ArrowRight, BookOpen, ChevronDown, Search, X } from 'lucide-react';
 import { useJson } from './catalog';
 import CardPreview from './CardPreview';
 import type { Catalog } from './idoly-types';
 import { groupUpdates, textUpdateView, type TextUpdate } from './text-updates';
 import { isTextOnlyStoryGroup } from './story-presentation';
+import ListPagination from './ListPagination';
 
 type Updates = { items: TextUpdate[]; source_commit: string; translation_commit: string; pending_count: number };
 const dateFormat = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeZone: 'Asia/Shanghai' });
@@ -59,7 +60,7 @@ export default function TextUpdates({ catalog, categories }: { catalog: Catalog;
           </li>)}</ul>
         </details>
       </article>)}</div>
-      {pages > 1 && <nav className="updates-pagination" aria-label="文本更新分页"><button aria-label="上一页" disabled={current === 1} onClick={() => { setPage(current - 1); window.scrollTo(0, 0); }}><ChevronLeft size={18}/></button><span>{current} / {pages}</span><button aria-label="下一页" disabled={current === pages} onClick={() => { setPage(current + 1); window.scrollTo(0, 0); }}><ChevronRight size={18}/></button></nav>}
+      <ListPagination page={current} pages={pages} label="文本更新分页" onChange={next=>{setPage(next);window.scrollTo({top:0,left:0,behavior:'instant'})}}/>
     </>}
   </section>;
 }

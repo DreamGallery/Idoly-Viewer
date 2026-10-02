@@ -34,7 +34,6 @@
  .work-login{gap:10px;flex-wrap:wrap}
  .updates-select{flex:1 1 140px;flex-wrap:wrap;gap:6px}
  .updates-select select{width:100%;max-width:none}
- .updates-pagination button{width:44px;height:44px}
  .updates-tabs button{min-height:44px}
  .lightbox-stages button{min-height:44px}
  .card-lightbox{max-width:calc(100vw - 24px);padding:12px}

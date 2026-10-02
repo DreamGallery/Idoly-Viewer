@@ -37,7 +37,7 @@
 [data-theme=dark] .event-switch button{color:#bac5dc}
 [data-theme=dark] .event-switch button[aria-pressed=true]{background:#344364;color:#e2e8ff;box-shadow:none}
 [data-theme=dark] :is(.event-cover-placeholder,.updates-cover-placeholder){background:#232d42;color:#94a5d0;border-color:var(--border)}
-[data-theme=dark] :is(.card-trait-icon,.lightbox-stages button,.lightbox-toolbar button,.updates-pagination button){background:var(--night-raised);border-color:var(--border);color:var(--foreground)}
+[data-theme=dark] :is(.card-trait-icon,.lightbox-stages button,.lightbox-toolbar button,.list-pagination button){background:var(--night-raised);border-color:var(--border);color:var(--foreground)}
 [data-theme=dark] .card-trait-icon.trait-vocal{color:#f187a1}
 [data-theme=dark] .card-trait-icon.trait-dance{color:#79b0ff}
 [data-theme=dark] .card-trait-icon.trait-visual{color:#e1bd55}
