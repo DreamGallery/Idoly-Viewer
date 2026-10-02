@@ -9,6 +9,7 @@ import warnings
 
 from .build import ROOT, WORK, load
 from .downloads import download_file
+from .audio import encode_flac
 
 
 def select_voice_clips(clips, names):
@@ -41,7 +42,7 @@ def materialize(kind, name, root=ROOT, *, plan=None, cache_root=None, voice_name
         raise ValueError('Asset is not referenced by this index')
     item=plan['assets'][bank]
     cache=(cache_root or root/'.local/media')/item['md5']
-    target=cache/(name+('.webp' if kind=='image' else '.mp4' if kind=='video' else '.wav'))
+    target=cache/(name+('.webp' if kind=='image' else '.mp4' if kind=='video' else '.flac'))
     if target.is_file():return target
     cache.mkdir(parents=True,exist_ok=True)
     bundle=cache/'source.bundle'
@@ -82,11 +83,13 @@ def materialize(kind, name, root=ROOT, *, plan=None, cache_root=None, voice_name
         allowed=set(voice_names) if voice_names is not None else {n for n,b in plan['voices'].items() if b==bank}
         clips=[obj.read() for obj in env.objects if obj.type.name=='AudioClip']
         for output_name,clip in select_voice_clips(clips,allowed).items():
+            output=cache/(output_name+'.flac')
+            if output.is_file():continue
             samples=clip.samples
             if len(samples)!=1:continue
             value=next(iter(samples.values()))
             if value[:4]!=b'RIFF' or value[8:12]!=b'WAVE':raise ValueError('Invalid decoded audio')
-            atomic(cache/(output_name+'.wav'),value)
+            encode_flac(value,output)
     if not target.is_file():raise ValueError('Exact audio/image name missing from game bundle')
     return target
 

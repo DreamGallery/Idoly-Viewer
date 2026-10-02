@@ -103,17 +103,17 @@ class PublicationTests(unittest.TestCase):
     def fixture(self,temp):
         stage=Path(temp)/'release';(stage/'web/data').mkdir(parents=True)
         (stage/'web/data/catalog.json').write_text('{}')
-        (stage/'media/voice').mkdir(parents=True);(stage/'media/voice/voice.wav').write_bytes(b'RIFF-example')
+        (stage/'media/voice').mkdir(parents=True);(stage/'media/voice/voice.flac').write_bytes(b'fLaC-example')
         return stage
     def test_media_keys_reused_and_mapping_sharded(self):
         with tempfile.TemporaryDirectory() as temp:
             stage=self.fixture(temp);files,jobs=snapshot_plan(stage)
-            voice=files['media/voice/voice.wav']
-            sha=hashlib.sha256(b'RIFF-example').hexdigest()
-            self.assertEqual(voice,f'media/{sha}/voice.wav')
+            voice=files['media/voice/voice.flac']
+            sha=hashlib.sha256(b'fLaC-example').hexdigest()
+            self.assertEqual(voice,f'media/{sha}/voice.flac')
             root=json.loads((stage/'file-map.json').read_text());self.assertFalse(root['files'])
-            shard=hashlib.sha256(b'media/voice/voice.wav').hexdigest()[:2]
-            self.assertEqual(json.loads((stage/'maps'/(shard+'.json')).read_text())['files']['media/voice/voice.wav'],voice)
+            shard=hashlib.sha256(b'media/voice/voice.flac').hexdigest()[:2]
+            self.assertEqual(json.loads((stage/'maps'/(shard+'.json')).read_text())['files']['media/voice/voice.flac'],voice)
     def test_failed_upload_never_switches_pointer(self):
         class S3:
             writes=[]

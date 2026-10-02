@@ -146,7 +146,8 @@ def upload_batch(s3,bucket,prefix,jobs,label,workers=4,inventory=None):
                     if existing[key]!=path.stat().st_size:raise ValueError('R2 immutable object size conflict: '+key)
                     progress.finish('skipped');return
                 mime=mimetypes.guess_type(path.name)[0] or 'application/octet-stream'
-                if path.suffix=='.csv':mime='text/csv; charset=utf-8'
+                if path.suffix=='.flac':mime='audio/flac'
+                elif path.suffix=='.csv':mime='text/csv; charset=utf-8'
                 elif path.suffix=='.json':mime='application/json; charset=utf-8'
                 elif path.suffix=='.txt':mime='text/plain; charset=utf-8'
                 elif path.name.endswith('.tar.gz'):mime='application/gzip'

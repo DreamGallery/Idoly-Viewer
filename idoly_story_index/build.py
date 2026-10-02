@@ -107,7 +107,7 @@ def voice_links(script, rows, assets):
             exact = abs(start - vstart) < .08
             continuation = vstart < start < vstart + vduration - .05 and actor and actor == vactor
             if exact or continuation:
-                clips.append({'asset': name, 'bank': bank, 'url': '/api/media/voice/' + name + '.wav', 'label': name})
+                clips.append({'asset': name, 'bank': bank, 'url': '/api/media/voice/' + name + '.flac', 'label': name})
         if clips:
             result.append({'row_id': row['id'], 'text': row['text'], 'speaker': row['name'], 'clips': clips})
     return result

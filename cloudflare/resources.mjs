@@ -1,4 +1,4 @@
-const contentType = key => ({json:'application/json; charset=utf-8',csv:'text/csv; charset=utf-8',txt:'text/plain; charset=utf-8',webp:'image/webp',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',svg:'image/svg+xml',wav:'audio/wav',ogg:'audio/ogg',mp3:'audio/mpeg',mp4:'video/mp4',webm:'video/webm',gz:'application/gzip'}[key.split('.').pop().toLowerCase()] || 'application/octet-stream');
+const contentType = key => ({json:'application/json; charset=utf-8',csv:'text/csv; charset=utf-8',txt:'text/plain; charset=utf-8',webp:'image/webp',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',svg:'image/svg+xml',wav:'audio/wav',flac:'audio/flac',ogg:'audio/ogg',mp3:'audio/mpeg',mp4:'video/mp4',webm:'video/webm',gz:'application/gzip'}[key.split('.').pop().toLowerCase()] || 'application/octet-stream');
 const jsonResponse = (request, value, release) => new Response(request.method==='HEAD'?null:JSON.stringify(value), {headers:{'Content-Type':'application/json; charset=utf-8','X-Idoly-Release':release,'Cache-Control':'public, max-age=31536000, immutable'}});
 const error = status => Object.assign(new Error('Resource unavailable'), {status});
 const safe = value => {
@@ -82,12 +82,14 @@ export function resources(env) {
   }
   async function stream(request, key, download=false, immutable=false) {
     const headers = new Headers({'X-Content-Type-Options':'nosniff','Cache-Control':immutable?'public, max-age=31536000, immutable':'no-store','Accept-Ranges':'bytes'});
-    const fullKey = prefix+'/'+await resolveFile(safe(key));
+    const resolved = await resolveFile(safe(key));
+    const fullKey = prefix+'/'+resolved;
     const release=/^releases\/([^/]+)\//.exec(key)?.[1];
     if(release) headers.set('X-Idoly-Release',release);
-    const head = await bucket.head(fullKey); if(!head) throw error(404);
+    const head = await bucket.head(fullKey);
+    if(!head) throw error(404);
     head.writeHttpMetadata(headers); headers.set('ETag',head.httpEtag);
-    if (!headers.has('Content-Type')) headers.set('Content-Type', contentType(key));
+    if (!headers.has('Content-Type')) headers.set('Content-Type', contentType(resolved));
     headers.set('Cache-Control',immutable?'public, max-age=31536000, immutable':'no-store');
     if(download) {headers.set('Content-Disposition', 'attachment; filename="'+key.split('/').pop()+'"');headers.set('Content-Type','application/gzip');}
     if(request.headers.get('If-None-Match') === head.httpEtag) return new Response(null,{status:304,headers});
@@ -132,7 +134,7 @@ export function resources(env) {
     }
     if(path==='/api/resources/versions') {
       const info=await current();
-      return new Response(request.method==='HEAD'?null:JSON.stringify({revision:info?.versions?.revision ?? null,versions:versionList(info)}),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
+      return new Response(request.method==='HEAD'?null:JSON.stringify({revision:info?.versions?.revision ?? null,versions:versionList(info),release:info?.release ?? null}),{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
     }
     if(path.startsWith('/api/resources/download/')) {
       const name=path.slice('/api/resources/download/'.length), info=await current();

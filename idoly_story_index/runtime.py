@@ -109,7 +109,7 @@ def materialize_snapshot(root,stage,manifest,workers):
         def process(job):
             kind,name,names=job
             try:
-                extension={'image':'.webp','voice':'.wav','video':'.mp4'}[kind]
+                extension={'image':'.webp','voice':'.flac','video':'.mp4'}[kind]
                 bank=plan['voices'][name] if kind=='voice' else plan['videos'][name] if kind=='video' else name
                 cached=root/'cache/media'/plan['assets'][bank]['md5']
                 reused=all((cached/(item+extension)).is_file() for item in names)
@@ -203,7 +203,8 @@ def run_once(root,env=os.environ,prepare_only=False):
     inputs={'source':source_commit,'translations':translation_commit,'master':master_info,'octo':digest(toolkit/'cache/OctoManifest.json')}
     identity=fingerprint(inputs)
     if previous and load(previous/'complete.json')['fingerprint']==identity:
-        print('NAS: inputs unchanged; retaining current release',flush=True);return
+        print('NAS: inputs unchanged; retaining current release',flush=True)
+        return
     release=f'idoly-r{manifest["revision"]}-{identity[:16]}'
     stage=root/'releases'/release
     workers=max(1,min(8,int(env.get('IDOLY_DOWNLOAD_WORKERS','2'))))

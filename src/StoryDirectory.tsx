@@ -65,7 +65,7 @@ export default function StoryDirectory({ data, directory, filtered, category, op
    </div>}
   </section>;
  }
- return <section className={`story-directory ${['main','group'].includes(category)?'story-directory-compact':''}`} aria-label="分组剧情目录">
+ return <section className={`story-directory ${['main','group'].includes(category)?'story-directory-compact':''}`} data-category={category} aria-label="分组剧情目录">
   {category==='event'&&<div className="directory-tools">
    <div className="event-switch" role="group" aria-label="活动剧情类型"><button aria-pressed={eventType==='normal'} onClick={()=>setEventType('normal')}>通常 <small>{counts['event:normal']||0}</small></button><button aria-pressed={eventType==='love'} onClick={()=>setEventType('love')}>特殊 <small>{counts['event:love']||0}</small></button></div>
   </div>}

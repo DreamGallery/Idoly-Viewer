@@ -2,7 +2,7 @@
 .work-row>div,.work-original,.work-toolbar label{min-width:0}
 .work-original p,.work-notice,.work-error,.work-login,.lightbox-toolbar>span{overflow-wrap:anywhere}
 .search{min-width:0}
-.card-lightbox>img,.card-lightbox>video{max-width:100%}
+.card-lightbox>img,.card-video-stage{max-width:100%}
 @media(max-width:700px){
  .header-theme button{width:36px;height:36px;min-width:36px;min-height:36px}
  .header-theme{padding:2px;gap:0}

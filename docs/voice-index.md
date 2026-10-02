@@ -1,6 +1,6 @@
 # 剧情语音
 
-本项目使用 IDOLY PRIDE 的 Unity AssetBundle 语音资源。NAS 完成下载、解密、读取包内的 `CAB-…` 文件与 `AudioClip`，再通过 UnityPy 的音频解码器导出 WAV。当前流程不使用 ACB/AWB 或 vgmstream。
+本项目使用 IDOLY PRIDE 的 Unity AssetBundle 语音资源。NAS 完成下载、解密、读取包内的 `CAB-…` 文件与 `AudioClip`，再通过 UnityPy 的音频解码器取得 PCM WAV，使用 `flac -8 --verify` 编为无损 FLAC。编码器会重新解码核对音频采样，成功后才写入缓存。当前流程不使用 ACB/AWB 或 vgmstream。
 
 ## 匹配与缓存
 
@@ -12,6 +12,6 @@
 
 ## 播放
 
-准备完成的 WAV 上传到 R2，由同源 Worker `/api/media/voice/<name>.wav` 提供，支持范围请求。线上 Worker 不执行解包或音频转换。
+准备完成的 FLAC 上传到 R2，由同源 Worker `/api/media/voice/<name>.flac` 提供，支持范围请求。线上 Worker 不执行解包或音频转换。
 
-本地开发模式可以按需下载与解码，首次播放会更慢。可通过 `IDOLY_PYTHON` 指定已安装依赖的 Python 可执行文件；默认使用 `python3`。本地缓存位于 `.local/media/`，不进入 Git 或镜像。
+本地开发模式可以按需下载与解码，首次播放会更慢。可通过 `IDOLY_PYTHON` 指定已安装依赖的 Python 可执行文件；默认使用 `python3`，系统也需安装 `flac` 命令。本地缓存位于 `.local/media/`，不进入 Git 或镜像。

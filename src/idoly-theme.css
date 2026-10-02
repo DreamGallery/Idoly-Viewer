@@ -1,3 +1,5 @@
+/* Shared controls use the current IDOLY blue/violet palette. */
+:root{--primary:#1428ff;--secondary:#f2f4fb;--secondary-foreground:#4b5878;--accent:#edf0ff;--accent-foreground:#293eb0;--border:#dfe4ef;--input:#dfe4ef;--ring:#1428ff;--muted-foreground:#748298}
 .header-theme button{cursor:pointer}
 .header-theme button:hover{background:#e9edfb;color:#1428ff}
 :root[data-theme=dark]{
@@ -6,7 +8,7 @@
  --popover:#404044;--popover-foreground:#e8e8ed;--primary:#a5b3ff;--secondary:#424248;
  --secondary-foreground:#dce3ff;--muted:#252f43;--muted-foreground:#a6b3c9;
  --accent:#2b3654;--accent-foreground:#c5cfff;--border:#62626a;--input:#62626a;--ring:#a5b3ff;
- --gold:#a5b3ff;--night-panel:#363638;--night-raised:#424248;--night-muted:#c3c3d0;--night-accent:#b6bdff;
+ --night-panel:#363638;--night-raised:#424248;--night-muted:#c3c3d0;--night-accent:#b6bdff;
  background:var(--background);color:var(--foreground);
 }
 [data-theme=dark] body{background:var(--background)}
@@ -53,12 +55,12 @@
 [data-theme=dark] .directory-story-meta .status-tag.completed,[data-theme=dark] .update-kind.added{color:#8ed6ba}
 [data-theme=dark] .update-kind.added{background:#213d36}
 [data-theme=dark] .work-row textarea{background:#141c2a;border-color:var(--border)}
-[data-theme=dark] :is(.work-collaboration,.completion-stats){background:#202b40;border-color:var(--border)!important;--gold:#a5b3ff}
+[data-theme=dark] :is(.work-collaboration,.completion-stats){background:#202b40;border-color:var(--border)!important}
 [data-theme=dark] :is(.work-tasks a,.work-task-option){border-color:var(--border)!important}
 [data-theme=dark] :is(.work-editor button,.work-page button,.work-button,.work-toolbar input,.work-login input,.translation-ruby input){border-color:#4c5d7a}
 [data-theme=dark] :is(.work-editor .work-primary,.work-editor button[aria-pressed=true],.work-page button[aria-pressed=true]){background:#2b3c60;color:#d4dfff;border-color:#8da4db}
 [data-theme=dark] :is(.work-notice,.work-original .work-speaker small,.back-link){color:#a5c4f3}
-[data-theme=dark] .work-speaker-avatar{background:#2d3950;border-color:var(--border)}
+[data-theme=dark] .work-speaker-avatar{background:var(--accent);border-color:var(--border);color:var(--primary)}
 [data-theme=dark] .work-error{color:#ffb8bd;background:#5d30384d}
 [data-theme=dark] .work-row .row-validation{color:#ffafb7}
 [data-theme=dark] .work-voice small{color:#dfba80}

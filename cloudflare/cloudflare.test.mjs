@@ -218,3 +218,25 @@ test('oversized root and shard maps are rejected before JSON is read',async()=>{
  bucket={get:async key=>key.endsWith('/file-map.json')?{size:root.length,text:async()=>root}:tooLarge(2*1024*1024+1)};
  await assert.rejects(()=>resources({RESOURCES:bucket}).readFile('releases/r1/story','a.csv'),{status:503});assert.equal(texts,0);
 });
+
+test('FLAC streams directly with ranges and HEAD; retired WAV aliases are ignored',()=>fixture(async bucket=>{
+ const data=resources({RESOURCES:{head:key=>bucket.head(key),get:(key,...args)=>{
+  assert.ok(!key.includes('/voice-flac/'),'Worker must not read retired migration aliases');
+  return bucket.get(key,...args);
+ }},IDOLY_R2_PREFIX:'flactest'}),old='media/'+'a'.repeat(64)+'/voice.wav',replacement='media/'+'b'.repeat(64)+'/voice.flac';
+ await bucket.put('flactest/current.json',JSON.stringify({release:'new'}));
+ await bucket.put('flactest/releases/old/file-map.json',JSON.stringify({schema_version:1,files:{'media/voice/voice.wav':old}}));
+ await bucket.put('flactest/releases/new/file-map.json',JSON.stringify({schema_version:1,files:{'media/voice/voice.flac':replacement}}));
+ await bucket.put('flactest/'+replacement,'fLaC0123456789');
+ const req=(path,opts)=>new Request('https://site.test'+path,opts);
+ const versions=await (await data.route(req('/api/resources/versions'))).json();
+ assert.ok(!('voice_flac_aliases' in versions));assert.equal(versions.release,'new');
+ await bucket.put('flactest/voice-flac/aa.json',JSON.stringify({files:{[old]:replacement}}));
+ await assert.rejects(()=>data.route(req('/api/media/voice/voice.wav?release=old')),{status:404});
+ await assert.rejects(()=>data.route(req('/'+old)),{status:404});
+ let response=await data.route(req('/api/media/voice/voice.flac?release=new'));
+ assert.equal(response.headers.get('Content-Type'),'audio/flac');assert.equal(response.headers.get('X-Idoly-Release'),'new');assert.equal(await response.text(),'fLaC0123456789');
+ response=await data.route(req('/'+replacement,{headers:{Range:'bytes=0-3'}}));assert.equal(response.status,206);assert.equal(await response.text(),'fLaC');
+ response=await data.route(req('/api/media/voice/voice.flac',{method:'HEAD'}));assert.equal(response.status,200);assert.equal(response.headers.get('Content-Type'),'audio/flac');
+ assert.equal(await response.text(),'');assert.equal(response.headers.get('Content-Length'),'14');
+}));

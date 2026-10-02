@@ -24,12 +24,12 @@ export async function localMediaHandler(root){
   if(!pathname.startsWith('/api/media/'))return false;
   try{
    if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);res.end();return true}
-   const match=/^\/api\/media\/(image|voice|video)\/([A-Za-z0-9_.-]+)\.(webp|wav|mp4)$/.exec(pathname);
+   const match=/^\/api\/media\/(image|voice|video)\/([A-Za-z0-9_.-]+)\.(webp|wav|flac|mp4)$/.exec(pathname);
    if(!match)throw Object.assign(Error('Invalid media path'),{status:404});
    const [,kind,name,ext]=match;
-   const bank=kind==='image'&&ext==='webp'&&plan.images.includes(name)?name:kind==='voice'&&ext==='wav'?plan.voices[name]:kind==='video'&&ext==='mp4'?plan.videos?.[name]:null;
+   const bank=kind==='image'&&ext==='webp'&&plan.images.includes(name)?name:kind==='voice'&&(ext==='wav'||ext==='flac')?plan.voices[name]:kind==='video'&&ext==='mp4'?plan.videos?.[name]:null;
    if(!bank)throw Object.assign(Error('Media not indexed'),{status:404});
-   const item=plan.assets[bank],file=resolve(root,'.local/media',item.md5,name+'.'+ext);
+   const item=plan.assets[bank],file=resolve(root,'.local/media',item.md5,name+'.'+(kind==='voice'?'flac':ext));
    try{await access(file)}catch{
     // All clips in one bank share the same extraction promise.
     if(!pending.has(bank))pending.set(bank,limit(()=>exec(python,['-m','idoly_story_index.media',kind,name],{cwd:root,timeout:180000,maxBuffer:1024*1024})).finally(()=>pending.delete(bank)));
@@ -37,7 +37,7 @@ export async function localMediaHandler(root){
    }
    const info=await stat(file);let range;
    try{range=parseRange(req.headers.range,info.size)}catch{res.writeHead(416,{'Content-Range':`bytes */${info.size}`});res.end();return true}
-   const headers={'Content-Type':kind==='image'?'image/webp':kind==='video'?'video/mp4':'audio/wav','Accept-Ranges':'bytes','Cache-Control':'public, max-age=3600','X-Content-Type-Options':'nosniff','Content-Length':range?range.end-range.start+1:info.size};
+   const headers={'Content-Type':kind==='image'?'image/webp':kind==='video'?'video/mp4':'audio/flac','Accept-Ranges':'bytes','Cache-Control':'public, max-age=3600','X-Content-Type-Options':'nosniff','Content-Length':range?range.end-range.start+1:info.size};
    if(range)headers['Content-Range']=`bytes ${range.start}-${range.end}/${info.size}`;
    res.writeHead(range?206:200,headers);
    if(req.method==='HEAD'){res.end();return true}
