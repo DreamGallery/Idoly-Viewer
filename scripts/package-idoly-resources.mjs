@@ -15,7 +15,7 @@ const prefix=values.prefix;
 if(!prefix || prefix.split('/').some(p=>!p || p==='.' || p==='..') || /[\\\x00-\x1f]/.test(prefix)) throw new Error('Invalid prefix');
 const input=resolve(values.input), root=resolve(values.output,release);
 if(root===input || root.startsWith(input+sep)) throw new Error('Output must be outside the input snapshot');
-const types={'.json':'application/json; charset=utf-8','.csv':'text/csv; charset=utf-8','.txt':'text/plain; charset=utf-8','.png':'image/png','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml','.wav':'audio/wav','.flac':'audio/flac','.ogg':'audio/ogg','.mp3':'audio/mpeg','.mp4':'video/mp4','.webm':'video/webm'};
+const types={'.json':'application/json; charset=utf-8','.csv':'text/csv; charset=utf-8','.txt':'text/plain; charset=utf-8','.png':'image/png','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml','.wav':'audio/wav','.flac':'audio/flac','.ogg':'audio/ogg','.mp3':'audio/mpeg','.m4a':'audio/mp4','.mp4':'video/mp4','.webm':'video/webm'};
 const files={}, objects=[], seen=new Set();
 async function digest(path){const hash=createHash('sha256');for await(const chunk of createReadStream(path))hash.update(chunk);return hash.digest('hex');}
 async function put(key,content){

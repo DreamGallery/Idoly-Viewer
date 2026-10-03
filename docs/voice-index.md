@@ -1,6 +1,29 @@
 # 剧情语音
 
-本项目使用 IDOLY PRIDE 的 Unity AssetBundle 语音资源。NAS 完成下载、解密、读取包内的 `CAB-…` 文件与 `AudioClip`，再通过 UnityPy 的音频解码器取得 PCM WAV，使用 `flac -8 --verify` 编为无损 FLAC。编码器会重新解码核对音频采样，成功后才写入缓存。当前流程不使用 ACB/AWB 或 vgmstream。
+本项目使用 IDOLY PRIDE 的 Unity AssetBundle 语音资源。NAS 完成下载、解密、读取包内的 `CAB-…` 文件与 `AudioClip`，再通过 UnityPy 的音频解码器取得 PCM WAV，默认使用 `flac -8 --verify` 编为无损 FLAC。也可以在 NAS 首次启用编码设置时选择 MP3 或 AAC。FLAC 会核对解码后的采样，MP3／AAC 会检查格式、声道、采样率、时长及能否完整解码，成功后才写入缓存。当前流程不使用 ACB/AWB 或 vgmstream。
+
+## 首次启动选择编码
+
+在 NAS 的 `.env.r2.local` 中设置，再启动 Docker Compose。例如选 MP3 96 kbps：
+
+```dotenv
+IDOLY_VOICE_CODEC=mp3
+IDOLY_VOICE_BITRATE=96
+```
+
+| 编码值 | 格式 | 码率 |
+| --- | --- | --- |
+| `flac` | FLAC 8 级，无损，默认 | 忽略码率设置 |
+| `mp3` | MP3，有损 | 48、64、80、96、128、192 kbps |
+| `aac` | AAC-LC，M4A 容器，有损 | 48、64、80、96、128、192 kbps |
+
+MP3／AAC 未设置码率时使用 96 kbps。这些设置只影响剧情对话，音乐播放器的歌曲仍使用 FLAC。
+
+首次读取设置后，选择会保存到持久卷 `/runtime/voice-encoding.json`，日志会显示编码和码率。之后重启可保留相同配置，或移除这两个环境变量以沿用已保存设置；与保存值冲突时会报错停止本轮，不会自动切换编码。升级已有 FLAC 部署时，如果还没有这个设置文件，仍可在首次启动新版前选择 MP3／AAC；不设置则继续使用 FLAC。
+
+选用新版索引器镜像前请先更新 Worker 代码，使 AAC 响应使用正确的 `audio/mp4` 类型。新快照的台词链接会自动使用 `.flac`、`.mp3` 或 `.m4a` 后缀。
+
+已有部署首次选择不同编码时会重新生成对话音频并发布新快照，过程较长；原游戏包可从 NAS 缓存复用。此功能不删除 NAS 或 R2 上已有的音频，只有以后清理不再被快照引用的旧对象才会释放对应空间。不要删除整个 runtime 卷来更改设置，它还保存当前发布基线。
 
 ## 匹配与缓存
 
@@ -8,10 +31,10 @@
 
 优先精确匹配 AudioClip 名称；找不到时允许资源名带 `.wav` 扩展名。不会按顺序或相似名称猜测其他语音。出现歧义、缺少引用语音或解码失败时停止本轮发布，保留上一版。
 
-下载文件先检查大小和 MD5，成功后写入缓存。临时网络错误最多额外重试三次；详情见 [部署教程](cloudflare-deployment.md)。缓存按资源内容校验值组织，后续运行复用下载及解码结果。
+下载文件先检查大小和 MD5，成功后写入缓存。临时网络错误最多额外重试三次；详情见 [部署教程](cloudflare-deployment.md)。原游戏包缓存按资源内容校验值组织；MP3／AAC 的编码缓存额外按格式和码率分开，避免误用其他编码的文件。已有 FLAC 缓存继续复用。
 
 ## 播放
 
-准备完成的 FLAC 上传到 R2，由同源 Worker `/api/media/voice/<name>.flac` 提供，支持范围请求。线上 Worker 不执行解包或音频转换。
+准备完成的音频上传到 R2，由同源 Worker `/api/media/voice/<name>.<ext>` 提供，支持范围请求。剧情索引、音频链接及发布指纹包含本次选择的编码，读取旧版快照时仍使用旧版音频。线上 Worker 不执行解包或音频转换。
 
-本地开发模式可以按需下载与解码，首次播放会更慢。可通过 `IDOLY_PYTHON` 指定已安装依赖的 Python 可执行文件；默认使用 `python3`，系统也需安装 `flac` 命令。本地缓存位于 `.local/media/`，不进入 Git 或镜像。
+本地开发模式仍默认使用 FLAC，可以按需下载与解码，首次播放会更慢。可通过 `IDOLY_PYTHON` 指定已安装依赖的 Python 可执行文件；默认使用 `python3`，系统也需安装 `flac` 命令。本地缓存位于 `.local/media/`，不进入 Git 或镜像。

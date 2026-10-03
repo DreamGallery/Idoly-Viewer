@@ -259,3 +259,19 @@ test('music catalog, jacket and FLAC use the same pinned release with ranges',()
  assert.equal(voice.status,206);assert.equal(voice.headers.get('Content-Type'),'audio/flac');assert.equal(await voice.text(),'fLaC');
  const jacket=await data.route(req('/api/media/image/img_music_jacket_hsm-001.webp?release=new'));assert.equal(jacket.status,200);assert.equal(jacket.headers.get('Content-Type'),'image/webp');
 }));
+
+test('MP3 and AAC dialogue support pinned releases, ranges and HEAD',()=>fixture(async bucket=>{
+ const data=resources({RESOURCES:bucket,IDOLY_R2_PREFIX:'encoding'});
+ await bucket.put('encoding/current.json',JSON.stringify({release:'future'}));
+ for(const [ext,mime] of [['mp3','audio/mpeg'],['m4a','audio/mp4']]){
+  const target='media/'+'c'.repeat(64)+'/voice.'+ext;
+  await bucket.put('encoding/'+target,'0123456789');
+  await bucket.put(`encoding/releases/${ext}/file-map.json`,JSON.stringify({schema_version:1,files:{['media/voice/voice.'+ext]:target}}));
+  const url=`https://site.test/api/media/voice/voice.${ext}?release=${ext}`;
+  let response=await data.route(new Request(url,{headers:{Range:'bytes=2-5'}}));
+  assert.equal(response.status,206);assert.equal(await response.text(),'2345');
+  assert.equal(response.headers.get('Content-Type'),mime);assert.equal(response.headers.get('X-Idoly-Release'),ext);
+  response=await data.route(new Request(url,{method:'HEAD'}));
+  assert.equal(response.status,200);assert.equal(response.headers.get('Content-Type'),mime);assert.equal(response.headers.get('Content-Length'),'10');assert.equal(await response.text(),'');
+ }
+}));

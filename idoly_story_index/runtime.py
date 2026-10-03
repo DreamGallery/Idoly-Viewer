@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 
+from .voice_encoding import VoiceEncoding, encoding_for_bank, load_voice_encoding
 from .build import ROOT, build, load, save
 from .game_archive import prepare_archives
 from .master_source import fetch_master, REPO_PATTERN
@@ -82,7 +83,7 @@ def link_file(source,dest):
     except OSError:shutil.copyfile(source,dest)
 
 
-def materialize_snapshot(root,stage,manifest,workers):
+def materialize_snapshot(root,stage,manifest,workers,voice_encoding=VoiceEncoding()):
     from PIL import Image
     web=stage/'web';plan=load(web/'data/media-plan.json')
     assets={item['name']:item for item in manifest['assetBundleList'] if item.get('state')!=4}
@@ -110,13 +111,15 @@ def materialize_snapshot(root,stage,manifest,workers):
         def process(job):
             kind,name,names=job
             try:
-                extension={'image':'.webp','voice':'.flac','video':'.mp4'}[kind]
                 bank=plan['voices'][name] if kind=='voice' else plan['videos'][name] if kind=='video' else name
+                encoding=encoding_for_bank(bank,voice_encoding)
+                extension={'image':'.webp','voice':encoding.extension,'video':'.mp4'}[kind]
                 cached=root/'cache/media'/plan['assets'][bank]['md5']
+                if kind=='voice':cached=encoding.cache_directory(cached)
                 reused=all((cached/(item+extension)).is_file() for item in names)
                 if kind=='voice':
                     name=next((item for item in names if not (cached/(item+extension)).is_file()),name)
-                first=materialize(kind,name,plan=plan,cache_root=root/'cache/media',voice_names=names if kind=='voice' else None,on_download=progress.transfer)
+                first=materialize(kind,name,plan=plan,cache_root=root/'cache/media',voice_names=names if kind=='voice' else None,on_download=progress.transfer,voice_encoding=voice_encoding)
                 for item in names:
                     file=first.parent/(item+extension)
                     if not file.is_file(): raise ValueError('Referenced media was not decoded: '+item)
@@ -150,7 +153,7 @@ def add_music_snapshot(stage,master,translations,manifest):
     print(f"NAS: indexed {len(catalog['tracks'])} songs with game jackets; audio uses verified FLAC 8",flush=True)
 
 
-def build_snapshot(root,stage,master,toolkit,source,translations,manifest,workers=2,with_media=True):
+def build_snapshot(root,stage,master,toolkit,source,translations,manifest,workers=2,with_media=True,voice_encoding=VoiceEncoding()):
     web=stage/'web';web.mkdir(parents=True,exist_ok=True)
     seed_images(web)
     subprocess.run([sys.executable,str(ROOT/'scripts/build-idoly-data.py'),
@@ -159,9 +162,9 @@ def build_snapshot(root,stage,master,toolkit,source,translations,manifest,worker
         '--report',str(stage/'data-validation.json')],check=True)
     if load(stage/'data-validation.json')['warnings']:
         raise ValueError('Translated script validation failed; inspect this release data-validation.json before publication')
-    build(master,toolkit,source,translations,web/'data',report=stage/'index-report.json',history_cache=None)
+    build(master,toolkit,source,translations,web/'data',report=stage/'index-report.json',history_cache=None,voice_extension=voice_encoding.extension)
     add_music_snapshot(stage,master,translations,manifest)
-    if with_media:materialize_snapshot(root,stage,manifest,workers)
+    if with_media:materialize_snapshot(root,stage,manifest,workers,voice_encoding)
     catalog=load(web/'data/catalog.json')
     for story in catalog['stories']:
         relative=Path(story['path'])
@@ -208,6 +211,8 @@ def run_once(root,env=os.environ,prepare_only=False):
     previous=root/'releases'/remote['release'] if remote else None
     if previous and not (previous/'complete.json').is_file():
         raise ValueError('Remote release exists but NAS baseline is missing; restore its runtime volume or use a fresh R2 prefix')
+    voice_encoding=load_voice_encoding(root,env)
+    print(f'NAS: dialogue encoding: {voice_encoding.label}; music: FLAC 8',flush=True)
     print('NAS: syncing text repositories',flush=True)
     source,source_commit=sync_repo(root/'repos','source',env.get('IDOLY_SOURCE_REPO','DreamGallery/Hoshimi-Adv'),env.get('IDOLY_SOURCE_BRANCH','main'),token)
     translations,translation_commit=sync_repo(root/'repos','translations',env.get('IDOLY_TRANSLATION_REPO','DreamGallery/Idoly-localify-translations'),env.get('IDOLY_TRANSLATION_BRANCH','main'),token)
@@ -217,7 +222,7 @@ def run_once(root,env=os.environ,prepare_only=False):
     shutil.copyfile(ROOT/'vendor/hoshimi/src/adv_csv.py',toolkit/'src/adv_csv.py')
     print('NAS: checking Octo resource manifest',flush=True)
     manifest=update_manifest(toolkit/'cache/OctoManifest.json',env)
-    inputs={'source':source_commit,'translations':translation_commit,'master':master_info,'octo':digest(toolkit/'cache/OctoManifest.json')}
+    inputs={'voice_encoding':voice_encoding.to_dict(),'source':source_commit,'translations':translation_commit,'master':master_info,'octo':digest(toolkit/'cache/OctoManifest.json')}
     identity=fingerprint(inputs)
     if previous and load(previous/'complete.json')['fingerprint']==identity:
         print('NAS: inputs unchanged; retaining current release',flush=True)
@@ -229,7 +234,7 @@ def run_once(root,env=os.environ,prepare_only=False):
         if stage.exists():shutil.rmtree(stage)
         stage.mkdir(parents=True)
         print('NAS: generating index and materializing referenced website media',flush=True)
-        build_snapshot(root,stage,master,toolkit,source,translations,manifest,workers)
+        build_snapshot(root,stage,master,toolkit,source,translations,manifest,workers,voice_encoding=voice_encoding)
         print('NAS: preparing full-game increment',flush=True)
         versions=prepare_archives(root,stage,manifest,previous,workers)
         save(stage/'complete.json',{'fingerprint':identity,'inputs':inputs,'base_release':remote['release'] if remote else None})

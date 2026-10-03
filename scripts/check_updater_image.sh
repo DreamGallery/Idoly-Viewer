@@ -8,6 +8,9 @@ for name in ['requests','UnityPy','PIL','Crypto.Cipher.AES','google.protobuf','b
     importlib.import_module(name)
 importlib.import_module('fmod_toolkit')
 subprocess.run(['flac','--version'],check=True)
+encoders=subprocess.run(['ffmpeg','-hide_banner','-encoders'],check=True,text=True,stdout=subprocess.PIPE).stdout
+assert 'libmp3lame' in encoders and ' aac ' in encoders, 'MP3/AAC encoder missing'
+subprocess.run(['ffprobe','-version'],check=True,stdout=subprocess.DEVNULL)
 assert pathlib.Path('/app/scripts/build-idoly-data.py').is_file()
 assert not list(pathlib.Path('/app').glob('.env*')), 'Unexpected environment file in image'
 assert not pathlib.Path('/app/data').exists(), 'Downloaded assets must not be bundled'

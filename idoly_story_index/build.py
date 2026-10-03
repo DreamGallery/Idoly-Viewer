@@ -59,12 +59,14 @@ def timing(line):
     except (ValueError, KeyError):
         return None
 
-def voice_links(script, rows, assets):
+def voice_links(script, rows, assets, voice_extension='.flac'):
     """Associate by timeline and actor, including a cue spanning several messages.
 
     Never infer the next cue from CSV order; overlapping incompatible speakers
     are excluded. The browser also verifies the exact row ID, speaker and text.
     """
+    if voice_extension not in ('.flac', '.mp3', '.m4a'):
+        raise ValueError('Unsupported voice extension')
     lines = script.splitlines()
     messages, voices = [], []
     for row in rows:
@@ -107,12 +109,12 @@ def voice_links(script, rows, assets):
             exact = abs(start - vstart) < .08
             continuation = vstart < start < vstart + vduration - .05 and actor and actor == vactor
             if exact or continuation:
-                clips.append({'asset': name, 'bank': bank, 'url': '/api/media/voice/' + name + '.flac', 'label': name})
+                clips.append({'asset': name, 'bank': bank, 'url': '/api/media/voice/' + name + voice_extension, 'label': name})
         if clips:
             result.append({'row_id': row['id'], 'text': row['text'], 'speaker': row['name'], 'clips': clips})
     return result
 
-def build(master, toolkit, source, translations, output, report=ROOT/'reports/idoly-index.json', history_cache=ROOT/'.local/text-history/Hoshimi-Adv.git'):
+def build(master, toolkit, source, translations, output, report=ROOT/'reports/idoly-index.json', history_cache=ROOT/'.local/text-history/Hoshimi-Adv.git', voice_extension='.flac'):
     catalog = load(output/'catalog.json')
     excluded = confirmed_exclusions(source)
     catalog['stories']=[s for s in catalog['stories'] if not s['id'].endswith('_short') and s['id'] not in excluded]
@@ -291,7 +293,7 @@ def build(master, toolkit, source, translations, output, report=ROOT/'reports/id
         script=(source/'Resource'/(sid+'.txt')).read_text()
         fields=[f for f in adv.fields(script) if f.key!='name']
         rows=[{'id':adv.csv_identifier(f),'name':f.name,'text':f.source} for f in fields]
-        voice=voice_links(script,rows,assets)
+        voice=voice_links(script,rows,assets,voice_extension)
         for line in voice:
             for clip in line['clips']:
                 voice_plan[clip['asset']]=clip['bank']

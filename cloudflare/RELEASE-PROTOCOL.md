@@ -46,4 +46,4 @@ Upload content, then **all shards**, then the root map, and only then `current.j
 
 ## Voice format
 
-Voice objects use verified FLAC level 8 and `audio/flac`. Release maps reference these FLAC objects directly.
+Dialogue encoding is selected on the NAS at first startup and persisted in its runtime volume: verified FLAC level 8 (`.flac`, `audio/flac`), MP3 (`.mp3`, `audio/mpeg`), or AAC-LC in M4A (`.m4a`, `audio/mp4`). Music remains FLAC. Release maps and chapter links reference the selected extension directly; encoding and bitrate participate in the snapshot fingerprint. Old pinned releases keep their original references. Encoding selection does not delete old audio objects.

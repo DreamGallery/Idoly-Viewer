@@ -9,7 +9,8 @@ import warnings
 
 from .build import ROOT, WORK, load
 from .downloads import download_file
-from .audio import encode_flac
+from .audio import encode_flac, encode_audio
+from .voice_encoding import VoiceEncoding, encoding_for_bank
 from .textures import select_texture
 
 
@@ -28,7 +29,7 @@ def select_voice_clips(clips, names):
     return selected
 
 
-def materialize(kind, name, root=ROOT, *, plan=None, cache_root=None, voice_names=None, on_download=None):
+def materialize(kind, name, root=ROOT, *, plan=None, cache_root=None, voice_names=None, on_download=None, voice_encoding=VoiceEncoding()):
     # No user-supplied URLs or paths: all downloads come from the indexed manifest.
     plan=plan if plan is not None else load(root/'public/data/media-plan.json')
     if not re.fullmatch(r'[A-Za-z0-9_.-]+',name):
@@ -43,9 +44,11 @@ def materialize(kind, name, root=ROOT, *, plan=None, cache_root=None, voice_name
         raise ValueError('Asset is not referenced by this index')
     item=plan['assets'][bank]
     cache=(cache_root or root/'.local/media')/item['md5']
-    target=cache/(name+('.webp' if kind=='image' else '.mp4' if kind=='video' else '.flac'))
+    encoding=encoding_for_bank(bank,voice_encoding)
+    output_cache=encoding.cache_directory(cache) if kind=='voice' else cache
+    target=output_cache/(name+('.webp' if kind=='image' else '.mp4' if kind=='video' else encoding.extension))
     if target.is_file():return target
-    cache.mkdir(parents=True,exist_ok=True)
+    output_cache.mkdir(parents=True,exist_ok=True)
     bundle=cache/'source.bundle'
     if bundle.is_file():
         raw=bundle.read_bytes()
@@ -81,13 +84,14 @@ def materialize(kind, name, root=ROOT, *, plan=None, cache_root=None, voice_name
         allowed=set(voice_names) if voice_names is not None else {n for n,b in plan['voices'].items() if b==bank}
         clips=[obj.read() for obj in env.objects if obj.type.name=='AudioClip']
         for output_name,clip in select_voice_clips(clips,allowed).items():
-            output=cache/(output_name+'.flac')
+            output=output_cache/(output_name+encoding.extension)
             if output.is_file():continue
             samples=clip.samples
             if len(samples)!=1:continue
             value=next(iter(samples.values()))
             if value[:4]!=b'RIFF' or value[8:12]!=b'WAVE':raise ValueError('Invalid decoded audio')
-            encode_flac(value,output)
+            if encoding.codec=='flac':encode_flac(value,output)
+            else:encode_audio(value,output,encoding)
     if not target.is_file():raise ValueError('Exact audio/image name missing from game bundle')
     return target
 

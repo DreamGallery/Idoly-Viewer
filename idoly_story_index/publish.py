@@ -147,6 +147,8 @@ def upload_batch(s3,bucket,prefix,jobs,label,workers=4,inventory=None):
                     progress.finish('skipped');return
                 mime=mimetypes.guess_type(path.name)[0] or 'application/octet-stream'
                 if path.suffix=='.flac':mime='audio/flac'
+                elif path.suffix=='.mp3':mime='audio/mpeg'
+                elif path.suffix=='.m4a':mime='audio/mp4'
                 elif path.suffix=='.csv':mime='text/csv; charset=utf-8'
                 elif path.suffix=='.json':mime='application/json; charset=utf-8'
                 elif path.suffix=='.txt':mime='text/plain; charset=utf-8'
