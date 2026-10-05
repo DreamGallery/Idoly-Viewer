@@ -111,7 +111,7 @@ export function WorkbenchPage() {
     <section className="category-directory">{auth?.local&&<p className="local-notice">本地协作测试 · 任务与稿件仅保存到本机，不会提交 GitHub。</p>}
     {error && <p className="work-error" role="alert">{error}<button onClick={refresh}>重试</button></p>}
     {loading && <p role="status">正在读取协作信息…</p>}
-    {!loading && !error && !auth?.canCollaborate && <p className="work-access">{auth?.user ? '当前账号没有工作仓库的写权限，协作任务已隐藏。' : '登录并拥有工作仓库写权限后，可查看协作任务。'}</p>}
+    {!loading && !error && !auth?.canCollaborate && <p className="work-access">{auth?.user ? '当前账号没有' : '登录并拥有'}<a href={`https://github.com/${encodeURIComponent(WORK_OWNER)}/${encodeURIComponent(WORK_REPO)}`} target="_blank" rel="noopener noreferrer">工作仓库</a>{auth?.user ? '的写权限，协作任务已隐藏。' : '写权限后，可查看协作任务。'}</p>}
     {auth?.canCollaborate && !loading && !error && <>
       <CompletionStats tasks={docs} login={auth.user?.login || ''} />
       {mine && <button className="back-link" onClick={() => { setMine(false); setPage(1); }}><ArrowLeft size={16} />返回全部任务</button>}

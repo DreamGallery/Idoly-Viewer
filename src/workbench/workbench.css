@@ -49,3 +49,5 @@
 /* Shared editor fields and fallback speakers follow the active IDOLY palette. */
 .work-toolbar input::placeholder,.translation-ruby input::placeholder{color:var(--muted-foreground);opacity:1}
 .work-editor .work-toolbar input:focus-visible,.work-page .work-toolbar input:focus-visible,.work-editor .translation-ruby input:focus-visible{outline:0;border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 14%,transparent)}
+
+.work-access a{color:var(--primary);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}.work-access a:hover{text-decoration-thickness:2px}

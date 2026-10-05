@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { execFileSync } from 'node:child_process';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
@@ -9,8 +10,11 @@ import { localMusicHandler } from './server/local-music.mjs';
 // Serve mounted data directly: Vite's public-file inventory does not reliably
 // discover newly published files inside an external symlink without a restart.
 export default defineConfig(({ mode }) => {
+  let revision = 'local';
+  try { revision = execFileSync('git', ['describe', '--always', '--dirty'], { encoding: 'utf8' }).trim(); } catch { /* Source archives have no Git metadata. */ }
   const env = loadEnv(mode, process.cwd(), 'CAMPUS_');
   return {
+    define: { __APP_REVISION__: JSON.stringify(revision) },
     publicDir: process.env.CAMPUS_CLOUDFLARE_BUILD ? '.wrangler/ui-public' : 'public',
     build: { outDir: process.env.CAMPUS_CLOUDFLARE_BUILD ? '.cloudflare-dist' : 'dist' },
     plugins: [react(), {

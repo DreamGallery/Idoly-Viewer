@@ -13,6 +13,6 @@
 | 活动封面 | 优先 `img_story_event_banner_<EventStory.assetId>`，按 3:1 显示；其他场景保留原图比例 |
 | 静态与动态卡面 | `img_card_full_*_<Card.assetId>` 与 `mov_card_full_*`，静态卡面按游戏 16:9 比例还原；觉醒关系使用 CardEvolution |
 | 羁绊／生日立绘 | 官网角色页面的 `main_b` 常服／制服与 `main_a` 演出服；原始 URL 和 SHA-256 见 `deploy/nas/character-portraits.json` |
-| 场景与语音 | 由原始 ADV、MasterDB 和 Octo 清单建立引用，在 NAS 处理后上传 R2 |
+| 场景与语音 | 由原始 ADV、MasterDB 和 Octo 清单建立引用，由 Docker 更新器处理后上传 R2 |
 
 仓库只保留固定界面图标与背景。角色、封面、语音、动态卡面及生成索引由更新器获取；资源名映射见 `deploy/nas/image-assets.json`。字体许可见 `public/fonts/`。

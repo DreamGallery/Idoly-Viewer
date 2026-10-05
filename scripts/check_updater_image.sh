@@ -10,6 +10,9 @@ importlib.import_module('fmod_toolkit')
 subprocess.run(['flac','--version'],check=True)
 encoders=subprocess.run(['ffmpeg','-hide_banner','-encoders'],check=True,text=True,stdout=subprocess.PIPE).stdout
 assert 'libmp3lame' in encoders and ' aac ' in encoders, 'MP3/AAC encoder missing'
+assert all(not line.split()[0].startswith('V') for line in encoders.splitlines() if len(line.split())>2 and line.split()[1]!='='), 'Unexpected video encoder in audio-only build'
+assert subprocess.run(['dpkg-query','-W','-f=${Status}','ffmpeg'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode != 0, 'Full FFmpeg package should not be installed'
+assert pathlib.Path('/usr/local/share/doc/ffmpeg/ffmpeg-5.1.9.tar.xz').is_file(), 'FFmpeg corresponding source missing'
 subprocess.run(['ffprobe','-version'],check=True,stdout=subprocess.DEVNULL)
 assert pathlib.Path('/app/scripts/build-idoly-data.py').is_file()
 assert not list(pathlib.Path('/app').glob('.env*')), 'Unexpected environment file in image'

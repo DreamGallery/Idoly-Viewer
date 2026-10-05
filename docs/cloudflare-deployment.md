@@ -1,4 +1,6 @@
-# Worker + R2 + x86 NAS 部署
+# Worker + R2 + Docker 部署
+
+资源更新器通过 Docker Compose 运行，预编译镜像支持 `linux/amd64`。
 
 ## 配置文件
 
@@ -14,7 +16,7 @@ chmod 600 .dev.vars deploy/.env.r2.local
 | 位置 | 填写内容 |
 | --- | --- |
 | `wrangler.local.jsonc` | `account_id`、`r2_buckets[0].bucket_name`、`d1_databases[0].database_id`、`vars.CAMPUS_PUBLIC_ORIGIN` |
-| `wrangler.local.jsonc` | `vars.IDOLY_R2_PREFIX` 与 NAS 相同；协作仓库的 `CAMPUS_WORK_OWNER/REPO/BRANCH` |
+| `wrangler.local.jsonc` | `vars.IDOLY_R2_PREFIX` 与 Docker 更新器配置相同；协作仓库的 `CAMPUS_WORK_OWNER/REPO/BRANCH` |
 | `.dev.vars` | `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`SESSION_SECRET`（至少 32 字符随机值） |
 | `deploy/.env.r2.local` | `IDOLY_R2_ENDPOINT`、`IDOLY_R2_BUCKET`、`IDOLY_R2_PREFIX`、`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY` |
 | `deploy/.env.r2.local` | `IDOLY_GITHUB_TOKEN`：原文／译文仓库 Contents 读取权限，MasterDB Actions 附件读取权限 |
@@ -26,13 +28,13 @@ Octo 参数用于资源清单，不需要游戏账号登录。使用自己的现
 
 AES 两项只填一项，另一项留空：原始文本密钥填 `IDOLY_OCTO_AES_PASSPHRASE`，更新器会计算 SHA-256；已经派生好的 AES 密钥填 `IDOLY_OCTO_AES_KEY_HEX`，需为 32／48／64 位十六进制字符（`0-9`、`a-f`，不带 `0x`）。不要直接将原始字符串填入 `KEY_HEX`，也不要只将原始字符串转为十六进制来代替派生。
 
-若日志出现 `non-hexadecimal number found in fromhex()`，检查 `IDOLY_OCTO_AES_KEY_HEX` 是否误填原始字符串或占位内容。修改 NAS 的 `.env.r2.local` 后执行 `docker compose up -d --force-recreate updater`，随后用 `docker compose logs -f --tail=100 updater` 查看结果；单独 `restart` 不会重新载入环境变量。不要删除 runtime 卷。
+若日志出现 `non-hexadecimal number found in fromhex()`，检查 `IDOLY_OCTO_AES_KEY_HEX` 是否误填原始字符串或占位内容。修改 Docker 配置文件 `.env.r2.local` 后执行 `docker compose up -d --force-recreate updater`，随后用 `docker compose logs -f --tail=100 updater` 查看结果；单独 `restart` 不会重新载入环境变量。不要删除 runtime 卷。
 
-R2 S3 凭据仅放 NAS，权限限制到指定桶的对象读写。Worker 通过 `RESOURCES` 绑定读取 R2，不需要 S3 密钥。无需公开 R2 桶或配置资源域名；资源默认经同源 Worker 提供。
+R2 S3 凭据仅配置在 Docker 更新器中，权限限制到指定桶的对象读写。Worker 通过 `RESOURCES` 绑定读取 R2，不需要 S3 密钥。无需公开 R2 桶或配置资源域名；资源默认经同源 Worker 提供。
 
-## 构建和启动 NAS
+## 构建和启动 Docker 更新器
 
-NAS 有源码时，在项目根目录执行：
+使用源码构建时，在项目根目录执行：
 
 ```sh
 docker compose -f deploy/compose.r2.yaml build updater
@@ -41,14 +43,14 @@ docker compose -f deploy/compose.r2.yaml up -d updater
 docker compose -f deploy/compose.r2.yaml logs -f --tail=100 updater
 ```
 
-Compose 已指定 `linux/amd64`。如在 Mac 构建，再让 NAS 拉镜像：
+Compose 已指定 `linux/amd64`。如需构建并推送镜像，供其他 Docker 环境拉取：
 
 ```sh
 docker buildx build --platform linux/amd64 -f docker/Dockerfile.updater \
   -t YOUR_REGISTRY/YOUR_IMAGE:YOUR_VERSION --push .
 ```
 
-NAS 放置三个文件：
+使用预编译镜像时，在部署目录放置三个文件：
 
 - `deploy/nas/docker-compose.yaml` → `docker-compose.yaml`
 - `deploy/nas/.env.example` → `.env`，将 `IDOLY_UPDATER_IMAGE` 改成自己的标签或 digest
@@ -60,7 +62,7 @@ NAS 放置三个文件：
 
 游戏媒体、增量资源、资源清单及官网立绘下载遇到网络超时／断流、HTTP 408／429／500／502／503／504 时，单次下载最多额外重试 3 次（共 4 次尝试），间隔 2／4／8 秒；数字形式的 `Retry-After` 可延长等待，最多 60 秒。游戏资源大小或校验和不符也会重新下载，临时文件在每次尝试后清理，校验成功才写入缓存。401／403／404、证书错误、磁盘错误和解包／名称错误不重试。耗尽后本轮失败，仍按上述整轮间隔重试。
 
-`Website media download/extract` 和 `Game increment download/extract` 是 NAS 下载／解包阶段，`completed` 为本轮新处理任务数，`cached` 为复用已处理结果数，`downloaded` 为本轮实际收到的下载字节（包括失败后重传，不包含缓存和解包后体积）。一个任务可能是包含多句语音的资源包。全部准备完成后才进入单独的 `R2` 上传阶段，其 `uploaded`／`skipped` 表示上传／跳过对象数。
+`Website media download/extract` 和 `Game increment download/extract` 是更新器的下载／解包阶段，`completed` 为本轮新处理任务数，`cached` 为复用已处理结果数，`downloaded` 为本轮实际收到的下载字节（包括失败后重传，不包含缓存和解包后体积）。一个任务可能是包含多句语音的资源包。全部准备完成后才进入单独的 `R2` 上传阶段，其 `uploaded`／`skipped` 表示上传／跳过对象数。
 
 `--prepare-only` 可在**独立测试 runtime** 生成快照而不上传。它不推进正式基线，也不访问已有 R2 发布；不要将这个测试目录直接当作已有站点的生产卷。
 
@@ -68,10 +70,10 @@ NAS 放置三个文件：
 
 1. 同步原文与译文 Git 仓库，保留提交历史以生成文本更新页面。
 2. 固定 MasterDB 提交。依照 [仓库说明](https://github.com/MalitsPlus/ipr-master-diff#artifacts)，优先找同提交的 `databases` Actions 附件。附件过期、不存在或未配置下载凭据时，从该提交读取所需表；压缩 JSON 可解包，不读取无关的大型 `Reward` 表。失败不混入旧表。
-3. 更新 Octo 完整资源清单，生成 MasterDB 分类索引，并在 NAS 解包网站图片、逐句语音及动态卡面。
+3. 更新 Octo 完整资源清单，生成 MasterDB 分类索引，并在容器中解包网站图片、逐句语音及动态卡面。
 4. 首次记录完整基线。之后对全部 AssetBundle／Resource 条目按内容比较，下载所有新增／变化项，记录删除项；不局限于网站引用的素材。
 5. 包内 `assetbundle/` 为解密后的资源，`resource/` 为原始资源文件，`image/Texture2D/` 为 PNG，`stretch/` 为按 IDOLY 规则修正为 2560×1440 的卡面／适用主视觉副本。原图同时保留。`increment.json` 记录范围。
-6. 归档文件 `644`、目录 `755`，清除所有者和 ACL。实际 NAS 环境配置仍保持 `600`，两者用途不同。
+6. 归档文件 `644`、目录 `755`，清除所有者和 ACL。私密环境配置文件仍保持 `600`，两者用途不同。
 7. 上传资源、文本、最近五包和分片映射，校验后以 ETag 条件切换 `current.json`。失败时旧发布继续服务。
 
 只保留最近五个增量包，不会伪造首次运行前的历史更新。跨过多次游戏更新才运行时，生成的是上次成功基线到当前版本的完整差异包。旧媒体与索引暂保留供已打开页面及回滚使用，未做自动垃圾回收。
@@ -103,13 +105,13 @@ npx wrangler deploy --config wrangler.local.jsonc
 
 `.dev.vars` 仅用于本地模拟，不会自动上传成正式 Secret。`build:cloudflare` 只构建并 dry-run，最后一条才真正发布。
 
-网页可以先上线；首次 R2 发布前会显示资源准备提示并自动重试。NAS 完成首次发布后再核对内容。检查目录、图片、逐句语音、动态卡面、GitHub 登录和任务读取。没有规范任务 Issue 时协作页为空是正常情况。翻译／校对正式稿仍写 GitHub；NAS 下次同步后更新公开索引。
+网页可以先上线；首次 R2 发布前会显示资源准备提示并自动重试。更新器完成首次发布后再核对内容。检查目录、图片、逐句语音、动态卡面、GitHub 登录和任务读取。没有规范任务 Issue 时协作页为空是正常情况。翻译／校对正式稿仍写 GitHub；更新器下次同步后更新公开索引。
 
 ## 维护
 
 - 不要删除 runtime 卷。远端已有发布而本地基线缺失时，更新器会拒绝继续；恢复卷备份，或使用新的专用前缀重新初始化。
 - 同一前缀只运行一个更新器；条件冲突不能强行覆盖。
-- 网站代码更新需重新发布 Worker；资源内容更新由 NAS 自动完成。
+- 网站代码更新需重新发布 Worker；资源内容更新由 Docker 更新器自动完成。
 - 不给 `current.json` 设置永久缓存，也不要对整个 R2 前缀设置短期自动删除。
 - 更新器升级保留持久卷；公网地址变化时同步修改 Worker origin 与 OAuth callback。
 

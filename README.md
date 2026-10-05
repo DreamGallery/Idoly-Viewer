@@ -7,9 +7,9 @@
 - **Cloudflare Worker**：网页、资源读取、GitHub OAuth 与协作接口。
 - **R2**：索引、剧情文本、图片、语音、歌曲与封面、动态卡面及最近五个游戏增量包。
 - **D1**：加密登录会话，不保存翻译稿件。
-- **NAS Docker（linux/amd64）**：更新资源、读取 MasterDB、生成索引和增量包、上传 R2。
+- **Docker（linux/amd64）**：更新资源、读取 MasterDB、生成索引和增量包、上传 R2。
 
-MasterDB 使用 [ipr-master-diff](https://github.com/MalitsPlus/ipr-master-diff)。优先读取匹配提交的完整 Actions 附件；附件不可用时，读取同一提交下索引所需的数据表。不会调用游戏 MasterDB 接口。
+MasterDB 使用 [ipr-master-diff](https://github.com/MalitsPlus/ipr-master-diff)。优先读取匹配提交的完整 Actions 附件；附件不可用时，读取同一提交下索引所需的数据表。
 
 ## 安装与配置
 
@@ -18,12 +18,12 @@ MasterDB 使用 [ipr-master-diff](https://github.com/MalitsPlus/ipr-master-diff)
 1. 安装网页依赖：`npm ci`。
 2. 将 `wrangler.jsonc` 复制为 `wrangler.local.jsonc`，填写账号、桶名、D1 ID、站点地址。
 3. 将 `.dev.vars.example` 复制为 `.dev.vars`，填写 GitHub OAuth 配置及随机会话密钥。
-4. 将 `deploy/.env.r2.example` 复制为 `deploy/.env.r2.local`，填写 NAS 的 R2、GitHub 与 Octo 资源配置。
-5. 按 [部署教程](docs/cloudflare-deployment.md) 初始化 NAS，并发布 Worker。网页可以先上线，NAS 完成首次资源发布后会自动载入。
+4. 将 `deploy/.env.r2.example` 复制为 `deploy/.env.r2.local`，填写更新器的 R2、GitHub 与 Octo 资源配置。
+5. 按 [部署教程](docs/cloudflare-deployment.md) 初始化 Docker 更新器，并发布 Worker。网页可以先上线，更新器完成首次资源发布后会自动载入。
 
 已有配置文件不要覆盖。实际配置均已加入 `.gitignore`；密钥只放本地配置或 Cloudflare Secrets，不使用 `VITE_` 前缀。
 
-## NAS 启动
+## Docker 启动
 
 在项目根目录执行：
 
@@ -34,11 +34,11 @@ docker compose -f deploy/compose.r2.yaml up -d
 docker compose -f deploy/compose.r2.yaml logs -f --tail=100
 ```
 
-也可以直接使用 [预编译镜像与 NAS Compose](deploy/nas/README.md)，无需在 NAS 编译。首次运行下载网站所需资源并建立增量基线，之后每次资源更新生成一个完整增量包，保留最近五包。没有历史清单时不能恢复过去的增量。
+也可以直接使用 [预编译镜像与 Docker Compose](deploy/nas/README.md)，无需自行编译。首次运行下载网站所需资源并建立增量基线，之后每次资源更新生成一个完整增量包，保留最近五包。没有历史清单时不能恢复过去的增量。
 
-包中包含全部变化资源、解出的原始 PNG、适用图片的比例修正副本及删除列表。文件权限为 `644`，目录为 `755`，不会继承 NAS 的 `600` 或 ACL。网站语音在 NAS 默认编码为 FLAC 8 级，首次启动也可选 MP3／AAC，后续复用对应编码缓存，详见 [语音说明](docs/voice-index.md)。上传按内容去重，日志显示进度；完整校验通过后才切换线上版本。
+包中包含全部变化资源、解出的原始 PNG、适用图片的比例修正副本及删除列表。网站语音由更新器默认编码为 FLAC 8 级，首次启动也可选 MP3／AAC，后续复用对应编码缓存，详见 [语音说明](docs/voice-index.md)。上传按内容去重，日志显示进度；完整校验通过后才切换线上版本。
 
-保留 `/runtime` 持久卷，不要执行 `down -v`。只允许一个更新器向同一 R2 前缀发布。
+保留 `/runtime` 持久卷。只允许一个更新器向同一 R2 前缀发布。
 
 ## 本地开发
 

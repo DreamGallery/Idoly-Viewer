@@ -1,10 +1,10 @@
 # 剧情语音
 
-本项目使用 IDOLY PRIDE 的 Unity AssetBundle 语音资源。NAS 完成下载、解密、读取包内的 `CAB-…` 文件与 `AudioClip`，再通过 UnityPy 的音频解码器取得 PCM WAV，默认使用 `flac -8 --verify` 编为无损 FLAC。也可以在 NAS 首次启用编码设置时选择 MP3 或 AAC。FLAC 会核对解码后的采样，MP3／AAC 会检查格式、声道、采样率、时长及能否完整解码，成功后才写入缓存。当前流程不使用 ACB/AWB 或 vgmstream。
+本项目使用 IDOLY PRIDE 的 Unity AssetBundle 语音资源。Docker 更新器完成下载、解密、读取包内的 `CAB-…` 文件与 `AudioClip`，再通过 UnityPy 的音频解码器取得 PCM WAV，默认使用 `flac -8 --verify` 编为无损 FLAC。也可以首次启动 Docker 更新器时选择 MP3 或 AAC。FLAC 会核对解码后的采样，MP3／AAC 会检查格式、声道、采样率、时长及能否完整解码，成功后才写入缓存。当前流程不使用 ACB/AWB 或 vgmstream。
 
 ## 首次启动选择编码
 
-在 NAS 的 `.env.r2.local` 中设置，再启动 Docker Compose。例如选 MP3 96 kbps：
+在 Docker 配置文件 `.env.r2.local` 中设置，再启动 Docker Compose。例如选 MP3 96 kbps：
 
 ```dotenv
 IDOLY_VOICE_CODEC=mp3
@@ -23,7 +23,11 @@ MP3／AAC 未设置码率时使用 96 kbps。这些设置只影响剧情对话�
 
 选用新版索引器镜像前请先更新 Worker 代码，使 AAC 响应使用正确的 `audio/mp4` 类型。新快照的台词链接会自动使用 `.flac`、`.mp3` 或 `.m4a` 后缀。
 
-已有部署首次选择不同编码时会重新生成对话音频并发布新快照，过程较长；原游戏包可从 NAS 缓存复用。此功能不删除 NAS 或 R2 上已有的音频，只有以后清理不再被快照引用的旧对象才会释放对应空间。不要删除整个 runtime 卷来更改设置，它还保存当前发布基线。
+已有部署首次选择不同编码时会重新生成对话音频并发布新快照，过程较长；原游戏包可从持久卷缓存复用。此功能不删除持久卷或 R2 中已有的音频，只有以后清理不再被快照引用的旧对象才会释放对应空间。不要删除整个 runtime 卷来更改设置，它还保存当前发布基线。
+
+## 精简音频工具
+
+Docker 构建从 FFmpeg 官方源码编译专用的 `ffmpeg`／`ffprobe`，固定版本和 SHA-256 校验值。只保留 PCM WAV 输入、MP3／AAC 编码、MP3／M4A 解码校验及必要的音频过滤，不安装系统的完整 FFmpeg 包或视频图形依赖。编译器只存在于构建阶段；运行镜像包含音频工具、许可证及对应源码，构建选项见 `docker/Dockerfile.updater`。FLAC 继续使用独立的 `flac -8 --verify`，现有缓存和编码设置保持兼容。
 
 ## 匹配与缓存
 

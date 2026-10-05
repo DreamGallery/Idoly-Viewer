@@ -1,6 +1,26 @@
+# Build only the audio tools used by the updater; compilers stay in this stage.
+FROM python:3.12-slim-bookworm AS audio-tools
+ARG DEBIAN_MIRROR=https://deb.debian.org
+RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources && apt-get -o Acquire::Retries=3 update && apt-get -o Acquire::Retries=3 install -y --no-install-recommends build-essential pkg-config nasm curl xz-utils ca-certificates libmp3lame-dev && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+# Official upstream archive, pinned and checked before extraction.
+RUN curl --fail --location --retry 3 https://ffmpeg.org/releases/ffmpeg-5.1.9.tar.xz -o ffmpeg.tar.xz && echo "d9b593bb2ba93d4b50f74177e0cdcd41747e708596367deed0c30348a71dd176  ffmpeg.tar.xz" | sha256sum -c - && tar -xf ffmpeg.tar.xz
+WORKDIR /build/ffmpeg-5.1.9
+RUN ./configure --prefix=/opt/audio-tools --disable-everything --disable-autodetect \
+    --disable-network --disable-doc --disable-debug --disable-avdevice --disable-swscale \
+    --enable-small --enable-ffmpeg --enable-ffprobe --enable-libmp3lame \
+    --enable-encoder=libmp3lame,aac,pcm_s16le \
+    --enable-decoder=mp3float,aac,pcm_s16le,pcm_s24le,pcm_s32le,pcm_f32le,pcm_u8 \
+    --enable-parser=aac,mpegaudio --enable-demuxer=wav,mp3,mov \
+    --enable-muxer=mp3,ipod,null --enable-protocol=file,pipe \
+    --enable-filter=aresample,aformat,anull && make -j4 && make install
+RUN mkdir -p /opt/audio-tools/share/doc/ffmpeg && cp COPYING.LGPLv2.1 LICENSE.md /opt/audio-tools/share/doc/ffmpeg/ && cp ffbuild/config.log /opt/audio-tools/share/doc/ffmpeg/build-config.log && cp /build/ffmpeg.tar.xz /opt/audio-tools/share/doc/ffmpeg/ffmpeg-5.1.9.tar.xz
+
 FROM python:3.12-slim-bookworm
 ARG DEBIAN_MIRROR=https://deb.debian.org
-RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 update && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 install -y --no-install-recommends git ca-certificates libstdc++6 flac ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 update && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 install -y --no-install-recommends git ca-certificates libstdc++6 flac libmp3lame0 && rm -rf /var/lib/apt/lists/*
+COPY --from=audio-tools /opt/audio-tools/bin/ /usr/local/bin/
+COPY --from=audio-tools /opt/audio-tools/share/ /usr/local/share/
 WORKDIR /app
 COPY requirements.txt requirements-audio.txt requirements-assets.txt requirements-r2.txt ./
 ARG PIP_INDEX_URL=https://pypi.org/simple

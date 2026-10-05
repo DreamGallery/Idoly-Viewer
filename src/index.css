@@ -193,3 +193,12 @@ body::before{content:"";position:fixed;inset:-439px;z-index:-1;pointer-events:no
 /* Keep the site footer clear of directory cards and pagination controls. */
 .content>footer{margin-top:40px}
 @media(max-width:700px){.content>footer{margin-top:32px}}
+
+/* Source repository and website build version, below the copyright line. */
+.site-info{display:flex;align-items:center;justify-content:center;gap:10px;font-size:12px;line-height:1.6;color:var(--muted-foreground)}
+:root:not([data-theme=dark]) .site-info{color:#95a3ae}
+.site-info a{display:inline-flex;align-items:center;gap:6px;border-radius:4px}
+.site-info a:hover{color:var(--primary)}
+.site-info-version{font-size:11px;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.site-info-divider{opacity:.5}
+.content>footer:has(.site-info){flex-direction:column;align-items:center;gap:8px}

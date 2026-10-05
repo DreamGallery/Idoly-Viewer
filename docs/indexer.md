@@ -1,6 +1,6 @@
 # 剧情索引生成
 
-当前索引器位于 `idoly_story_index/`，只处理 IDOLY PRIDE。NAS 部署由 `python -m idoly_story_index.runtime` 自动同步数据、构建索引、处理媒体并发布 R2；安装步骤见 [部署教程](cloudflare-deployment.md)。
+当前索引器位于 `idoly_story_index/`，只处理 IDOLY PRIDE。Docker 部署通过 `python -m idoly_story_index.runtime` 自动同步数据、构建索引、处理媒体并发布 R2；安装步骤见 [部署教程](cloudflare-deployment.md)。
 
 ## 输入
 
@@ -31,6 +31,6 @@ python -m idoly_story_index.build \
   --output public/data
 ```
 
-工具目录需要提供 `src/adv_csv.py` 和 `cache/OctoManifest.json`；NAS 会自动准备这些文件。手动构建不会上传资源。生成的数据、报告和游戏素材不提交 Git。
+工具目录需要提供 `src/adv_csv.py` 和 `cache/OctoManifest.json`；Docker 更新器会自动准备这些文件。手动构建不会上传资源。生成的数据、报告和游戏素材不提交 Git。
 
 输出包括剧情目录、分组目录、逐章文本与媒体引用。语音处理见 [语音说明](voice-index.md)，线上发布格式见 [R2 协议](../cloudflare/RELEASE-PROTOCOL.md)。
