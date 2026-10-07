@@ -28,7 +28,7 @@ RUN pip install --no-cache-dir --index-url "$PIP_INDEX_URL" -r requirements-r2.t
 COPY idoly_story_index ./idoly_story_index
 COPY vendor/hoshimi ./vendor/hoshimi
 COPY scripts/build-idoly-data.py ./scripts/build-idoly-data.py
-COPY deploy/nas/image-assets.json deploy/nas/character-portraits.json ./deploy/nas/
+COPY deploy/docker/image-assets.json deploy/docker/character-portraits.json ./deploy/docker/
 COPY public/images ./public/images
 ENV PYTHONUNBUFFERED=1 IDOLY_RUNTIME_ROOT=/runtime
 CMD ["python", "-m", "idoly_story_index.runtime"]

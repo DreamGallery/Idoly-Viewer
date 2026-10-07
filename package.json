@@ -23,7 +23,7 @@
     "test:card-filters": "esbuild src/card-filters.test.ts --bundle --platform=node --format=esm --outfile=.test-build/card-filters.test.js && node --test .test-build/card-filters.test.js",
     "test:updates": "python3 -m unittest discover -s tests -p test_idoly_text_updates.py -v && esbuild src/text-updates.test.ts --bundle --platform=node --format=esm --outfile=.test-build/text-updates.test.js && node --test .test-build/text-updates.test.js",
     "dev:api:github": "node server/github.mjs",
-    "test:nas": "python3 -m unittest discover -s tests -p test_nas_pipeline.py -v"
+    "test:docker": "python3 -m unittest discover -s tests -p test_docker_pipeline.py -v"
   },
   "dependencies": {
     "@ibm/plex-sans": "^1.1.0",

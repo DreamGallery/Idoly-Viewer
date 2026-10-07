@@ -3,7 +3,7 @@
 当前使用 **Cloudflare Worker + R2 + Docker**：Worker 提供网页与协作接口，D1 保存加密登录会话，Docker 更新器负责游戏资源下载、解包、剧情索引生成及 R2 上传。
 
 - 完整配置步骤：[部署教程](../docs/cloudflare-deployment.md)。
-- 使用预编译镜像：[Docker 启动说明](nas/README.md)。
+- 使用预编译镜像：[Docker 启动说明](docker/README.md)。
 - Docker 配置模板：[.env.r2.example](.env.r2.example)。
 
 镜像包含更新器代码、依赖，以及 IDOLY PRIDE 的固定界面素材（标志、背景、组合和筛选图标等）。私密配置、下载缓存、生成的索引和语音不打入镜像；首次运行时由容器获取并处理所需资源。

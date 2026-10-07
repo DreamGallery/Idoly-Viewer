@@ -26,7 +26,7 @@ def connect(env=os.environ):
     from botocore.config import Config
     required = ['IDOLY_R2_ENDPOINT','IDOLY_R2_BUCKET','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY']
     if any(not env.get(k) for k in required):
-        raise ValueError('Fill R2 endpoint, bucket and access credentials in the NAS environment file')
+        raise ValueError('Fill R2 endpoint, bucket and access credentials in the updater environment file')
     endpoint = env['IDOLY_R2_ENDPOINT']
     if not endpoint.startswith('https://'):
         raise ValueError('R2 endpoint must use HTTPS')
@@ -175,7 +175,7 @@ def publish(s3,bucket,prefix,stage,versions,expected_etag,download_root,workers=
         print('R2: listing existing '+folder+' objects',flush=True)
         for page in s3.get_paginator('list_objects_v2').paginate(Bucket=bucket,Prefix=prefix+'/'+folder+'/'):
             for item in page.get('Contents',[]):inventory[item['Key'][len(prefix)+1:]]=item['Size']
-    upload_batch(s3,bucket,prefix,jobs,'R2 resources and text',workers,inventory)
+    upload_batch(s3,bucket,prefix,jobs,'R2: resources and text',workers,inventory)
     archives={}
     for item in versions['versions']:
         name=item['filename']
@@ -183,13 +183,13 @@ def publish(s3,bucket,prefix,stage,versions,expected_etag,download_root,workers=
         path=download_root/name
         if digest(path)!=item['sha256'] or path.stat().st_size!=item['bytes']: raise ValueError('Archive checksum mismatch')
         archives['downloads/'+name]=(path,item['sha256'])
-    upload_batch(s3,bucket,prefix,archives,'R2 incremental archives',min(workers,2))
+    upload_batch(s3,bucket,prefix,archives,'R2: incremental archives',min(workers,2))
     maps={f'releases/{release}/maps/{path.name}':(path,digest(path)) for path in (stage/'maps').glob('*.json')}
-    upload_batch(s3,bucket,prefix,maps,'R2 map shards',workers)
+    upload_batch(s3,bucket,prefix,maps,'R2: map shards',workers)
     mapping=stage/'file-map.json'
-    upload_batch(s3,bucket,prefix,{f'releases/{release}/file-map.json':(mapping,digest(mapping))},'R2 release map',1)
+    upload_batch(s3,bucket,prefix,{f'releases/{release}/file-map.json':(mapping,digest(mapping))},'R2: release map',1)
     pointer={'schema_version':1,'release':release,'published_at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'versions':versions}
-    # Compare-and-swap also protects first publication against another NAS.
+    # Compare-and-swap also protects first publication against another updater.
     condition={'IfMatch':expected_etag} if expected_etag else {'IfNoneMatch':'*'}
     print('R2: all objects verified; switching current.json',flush=True)
     s3.put_object(Bucket=bucket,Key=prefix+'/current.json',Body=json.dumps(pointer).encode(),

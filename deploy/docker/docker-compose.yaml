@@ -1,7 +1,7 @@
 name: idoly-r2-updater
 services:
   updater:
-    image: ${IDOLY_UPDATER_IMAGE:-dreamgallery/idoly-r2-updater:20261006-cf8}
+    image: ${IDOLY_UPDATER_IMAGE:-dreamgallery/idoly-r2-updater:20261007-cf9}
     platform: linux/amd64
     restart: unless-stopped
     init: true

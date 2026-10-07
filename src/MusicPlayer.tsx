@@ -107,7 +107,7 @@ export default function MusicPlayer() {
   const playbackIcon = loading ? <Loader2 className="music-spinner" size={22}/> : playing ? <Pause size={22} fill="currentColor"/> : <Play size={22} fill="currentColor"/>;
   const modeIcon = mode === 'single' ? <Repeat1 size={19}/> : mode === 'shuffle' ? <Shuffle size={19}/> : <Repeat size={19}/>;
 
-  // Old snapshots remain usable while the NAS prepares the first music release.
+  // Old snapshots remain usable while the Docker prepares the first music release.
   if (!import.meta.env.DEV && !tracks.length) return null;
   return <div className="music-player">
     <audio ref={audio} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}

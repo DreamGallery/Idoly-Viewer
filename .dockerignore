@@ -28,16 +28,16 @@
 
 !requirements-r2.txt
 
-# NAS: audited code and public artwork only. Never include toolkit config/cache.
+# Docker: audited code and public artwork only. Never include toolkit config/cache.
 !idoly_story_index/
 !idoly_story_index/*.py
 !vendor/
 !vendor/hoshimi/
 !vendor/hoshimi/**
 !scripts/build-idoly-data.py
-!deploy/nas/
-!deploy/nas/image-assets.json
-!deploy/nas/character-portraits.json
+!deploy/docker/
+!deploy/docker/image-assets.json
+!deploy/docker/character-portraits.json
 **/__pycache__/
 **/*.pyc
 **/.DS_Store
@@ -45,7 +45,7 @@
 **/*.local*
 **/config.ini
 
-# Only fixed IDOLY UI artwork; generated characters/covers stay on NAS.
+# Only fixed IDOLY UI artwork; generated characters/covers stay in the Docker runtime volume.
 !public/images/background/
 !public/images/background/**
 !public/images/card-filters/

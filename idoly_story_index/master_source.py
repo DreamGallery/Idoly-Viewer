@@ -19,7 +19,7 @@ REPO_PATTERN = re.compile(r'^[\w.-]+/[\w.-]+$')
 
 def github_session(token=''):
     session = requests.Session()
-    session.headers.update({'User-Agent': 'Idoly-Viewer-NAS', 'Accept': 'application/vnd.github+json',
+    session.headers.update({'User-Agent': 'Idoly-Viewer-Docker', 'Accept': 'application/vnd.github+json',
                             'X-GitHub-Api-Version': '2022-11-28'})
     if token:
         session.headers['Authorization'] = 'Bearer ' + token

@@ -1,4 +1,4 @@
-"""x86 NAS updater: GitHub text/MasterDB -> Octo media -> snapshot -> R2."""
+"""Docker updater: GitHub text/MasterDB -> Octo media -> snapshot -> R2."""
 import argparse
 import csv
 from concurrent.futures import ThreadPoolExecutor
@@ -48,10 +48,10 @@ def sync_repo(root,name,repository,branch,token):
         pending.replace(target)
     else:
         if git(['-C',str(target),'status','--porcelain']):
-            raise ValueError('NAS source checkout has local changes: '+name)
+            raise ValueError('Updater source checkout has local changes: '+name)
         expected='https://github.com/'+repository+'.git'
         if git(['-C',str(target),'remote','get-url','origin'])!=expected:
-            raise ValueError('NAS source repository differs from configuration: '+name)
+            raise ValueError('Updater source repository differs from configuration: '+name)
         git(['-C',str(target),'fetch','origin',branch])
         git(['-C',str(target),'checkout','--detach','FETCH_HEAD'])
     return target,git(['-C',str(target),'rev-parse','HEAD'])
@@ -61,7 +61,7 @@ def seed_images(web):
     # Explicitly selected public artwork only; no generated data or local auth.
     source=ROOT/'public/images'
     if source.exists(): shutil.copytree(source,web/'images',dirs_exist_ok=True)
-    portraits=load(ROOT/'deploy/nas/character-portraits.json')
+    portraits=load(ROOT/'deploy/docker/character-portraits.json')
     save(web/'data/character-portraits.json',portraits)
     for record in portraits.values():
         for image in record['images']:
@@ -88,7 +88,7 @@ def materialize_snapshot(root,stage,manifest,workers,voice_encoding=VoiceEncodin
     web=stage/'web';plan=load(web/'data/media-plan.json')
     assets={item['name']:item for item in manifest['assetBundleList'] if item.get('state')!=4}
     catalog=load(web/'data/catalog.json')
-    ui_assets=load(ROOT/'deploy/nas/image-assets.json')
+    ui_assets=load(ROOT/'deploy/docker/image-assets.json')
     for char in catalog['characters']:
         ui_assets[f'images/characters/chibi/{char["id"]}.png']='img_chr_icon_'+char['id']
         portrait=next((name for name in ('img_chr_adv_'+char['id']+'-00','img_message_icon_'+char['id']) if name in assets),None)
@@ -133,7 +133,7 @@ def materialize_snapshot(root,stage,manifest,workers,voice_encoding=VoiceEncodin
         target=web/relative;target.parent.mkdir(parents=True,exist_ok=True)
         with Image.open(file) as image:image.save(target,'PNG')
     save(web/'data/catalog.json',catalog)
-    # Internal CDN names/URLs remain on NAS, not in the public web snapshot.
+    # Internal CDN names/URLs remain in the updater runtime, not in the public web snapshot.
     save(stage/'media-plan.json',plan)
     (web/'data/media-plan.json').unlink()
 
@@ -150,7 +150,7 @@ def add_music_snapshot(stage,master,translations,manifest):
     plan['images']=sorted(set(plan['images'])|set(music['images']))
     save(web/'data/media-plan.json',plan)
     save(web/'data/music.json',catalog)
-    print(f"NAS: indexed {len(catalog['tracks'])} songs with game jackets; audio uses verified FLAC 8",flush=True)
+    print(f"Updater: indexed {len(catalog['tracks'])} songs with game jackets; audio uses verified FLAC 8",flush=True)
 
 
 def build_snapshot(root,stage,master,toolkit,source,translations,manifest,workers=2,with_media=True,voice_encoding=VoiceEncoding()):
@@ -192,7 +192,7 @@ def build_snapshot(root,stage,master,toolkit,source,translations,manifest,worker
 
 def fingerprint(inputs):
     recipe=hashlib.sha256()
-    for folder in ('idoly_story_index','vendor/hoshimi','deploy/nas'):
+    for folder in ('idoly_story_index','vendor/hoshimi','deploy/docker'):
         for path in sorted((ROOT/folder).rglob('*')):
             if path.is_file() and path.suffix in ('.py','.json') and '.local.' not in path.name:
                 recipe.update(path.relative_to(ROOT).as_posix().encode());recipe.update(path.read_bytes())
@@ -210,22 +210,22 @@ def run_once(root,env=os.environ,prepare_only=False):
     remote,etag=read_current(s3,bucket,prefix) if s3 else (None,None)
     previous=root/'releases'/remote['release'] if remote else None
     if previous and not (previous/'complete.json').is_file():
-        raise ValueError('Remote release exists but NAS baseline is missing; restore its runtime volume or use a fresh R2 prefix')
+        raise ValueError('Remote release exists but local updater baseline is missing; restore its runtime volume or use a fresh R2 prefix')
     voice_encoding=load_voice_encoding(root,env)
-    print(f'NAS: dialogue encoding: {voice_encoding.label}; music: FLAC 8',flush=True)
-    print('NAS: syncing text repositories',flush=True)
+    print(f'Updater: dialogue encoding: {voice_encoding.label}; music: FLAC 8',flush=True)
+    print('Updater: syncing text repositories',flush=True)
     source,source_commit=sync_repo(root/'repos','source',env.get('IDOLY_SOURCE_REPO','DreamGallery/Hoshimi-Adv'),env.get('IDOLY_SOURCE_BRANCH','main'),token)
     translations,translation_commit=sync_repo(root/'repos','translations',env.get('IDOLY_TRANSLATION_REPO','DreamGallery/Idoly-localify-translations'),env.get('IDOLY_TRANSLATION_BRANCH','main'),token)
-    print('NAS: checking GitHub MasterDB snapshot',flush=True)
+    print('Updater: checking GitHub MasterDB snapshot',flush=True)
     master,master_info=fetch_master(root/'master',env.get('IDOLY_MASTER_REPO','MalitsPlus/ipr-master-diff'),token,env.get('IDOLY_MASTER_REF','main'))
     toolkit=root/'toolkit';(toolkit/'src').mkdir(parents=True,exist_ok=True)
     shutil.copyfile(ROOT/'vendor/hoshimi/src/adv_csv.py',toolkit/'src/adv_csv.py')
-    print('NAS: checking Octo resource manifest',flush=True)
+    print('Updater: checking Octo resource manifest',flush=True)
     manifest=update_manifest(toolkit/'cache/OctoManifest.json',env)
     inputs={'voice_encoding':voice_encoding.to_dict(),'source':source_commit,'translations':translation_commit,'master':master_info,'octo':digest(toolkit/'cache/OctoManifest.json')}
     identity=fingerprint(inputs)
     if previous and load(previous/'complete.json')['fingerprint']==identity:
-        print('NAS: inputs unchanged; retaining current release',flush=True)
+        print('Updater: inputs unchanged; retaining current release',flush=True)
         return
     release=f'idoly-r{manifest["revision"]}-{identity[:16]}'
     stage=root/'releases'/release
@@ -233,9 +233,9 @@ def run_once(root,env=os.environ,prepare_only=False):
     if not (stage/'complete.json').exists():
         if stage.exists():shutil.rmtree(stage)
         stage.mkdir(parents=True)
-        print('NAS: generating index and materializing referenced website media',flush=True)
+        print('Updater: generating index and materializing referenced website media',flush=True)
         build_snapshot(root,stage,master,toolkit,source,translations,manifest,workers,voice_encoding=voice_encoding)
-        print('NAS: preparing full-game increment',flush=True)
+        print('Updater: preparing full-game increment',flush=True)
         versions=prepare_archives(root,stage,manifest,previous,workers)
         save(stage/'complete.json',{'fingerprint':identity,'inputs':inputs,'base_release':remote['release'] if remote else None})
     else:
@@ -243,7 +243,7 @@ def run_once(root,env=os.environ,prepare_only=False):
             raise ValueError('Prepared release baseline no longer matches remote current')
         versions=load(stage/'resource-versions.json')
     if prepare_only:
-        print('NAS: complete local snapshot prepared; no R2 upload: '+release,flush=True);return
+        print('Updater: complete local snapshot prepared; no R2 upload: '+release,flush=True);return
     publish(s3,bucket,prefix,stage,versions,etag,root/'downloads',max(1,min(8,int(env.get('IDOLY_UPLOAD_WORKERS','4')))))
     save(root/'last-success.json',{'release':release,'fingerprint':identity,'at':int(time.time())})
     # Delete only archives previously recorded by this updater, after publication.
@@ -254,7 +254,7 @@ def run_once(root,env=os.environ,prepare_only=False):
         try:
             s3.delete_object(Bucket=bucket,Key=prefix+'/downloads/'+name)
             (root/'downloads'/name).unlink(missing_ok=True)
-        except Exception:print('NAS: old archive cleanup deferred',flush=True)
+        except Exception:print('R2: old archive cleanup deferred',flush=True)
 
 
 def main():
@@ -267,7 +267,7 @@ def main():
     with (args.root/'update.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         while True:
-            print('NAS: update started '+time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),flush=True)
+            print('Updater: update started '+time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),flush=True)
             try:run_once(args.root,prepare_only=args.prepare_only);delay=interval
             except Exception as error:
                 # Exception types/messages from our checks are safe. SDK request
@@ -275,11 +275,11 @@ def main():
                 message=str(error) if isinstance(error,(ValueError,RuntimeError)) else type(error).__name__
                 if hasattr(error,'response') and isinstance(error.response,dict):
                     message+=' '+str(error.response.get('Error',{}).get('Code',''))
-                print('NAS: update failed; published snapshot unchanged: '+message,flush=True)
+                print('Updater: update failed; published snapshot unchanged: '+message,flush=True)
                 if args.once or args.prepare_only:raise SystemExit(1)
                 delay=min(interval,900)
             if args.once or args.prepare_only:return
-            print(f'NAS: next check in {delay} seconds',flush=True);time.sleep(delay)
+            print(f'Updater: next check in {delay} seconds',flush=True);time.sleep(delay)
 
 
 if __name__=='__main__':main()

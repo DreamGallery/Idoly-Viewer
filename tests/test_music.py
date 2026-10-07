@@ -59,7 +59,7 @@ class MusicIndexTests(unittest.TestCase):
         manifest['assetBundleList'][1]['state']=4
         self.assertEqual(build(manifest,rows)[0]['tracks'],[])
 
-    def test_nas_music_merges_existing_media_plan(self):
+    def test_docker_music_merges_existing_media_plan(self):
         import tempfile
         from pathlib import Path
         from idoly_story_index.build import save,load

@@ -34,7 +34,7 @@ docker compose -f deploy/compose.r2.yaml up -d
 docker compose -f deploy/compose.r2.yaml logs -f --tail=100
 ```
 
-也可以直接使用 [预编译镜像与 Docker Compose](deploy/nas/README.md)，无需自行编译。首次运行下载网站所需资源并建立增量基线，之后每次资源更新生成一个完整增量包，保留最近五包。没有历史清单时不能恢复过去的增量。
+也可以直接使用 [预编译镜像与 Docker Compose](deploy/docker/README.md)，无需自行编译。首次运行下载网站所需资源并建立增量基线，之后每次资源更新生成一个完整增量包，保留最近五包。没有历史清单时不能恢复过去的增量。
 
 包中包含全部变化资源、解出的原始 PNG、适用图片的比例修正副本及删除列表。网站语音由更新器默认编码为 FLAC 8 级，首次启动也可选 MP3／AAC，后续复用对应编码缓存，详见 [语音说明](docs/voice-index.md)。上传按内容去重，日志显示进度；完整校验通过后才切换线上版本。
 

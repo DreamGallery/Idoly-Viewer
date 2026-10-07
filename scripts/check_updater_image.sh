@@ -3,7 +3,7 @@ set -eu
 image=${1:?Usage: check_updater_image.sh IMAGE [PLATFORM]}
 platform=${2:-linux/amd64}
 docker run --rm -i --platform "$platform" --entrypoint python "$image" - <<'CHECK'
-import importlib, pathlib, subprocess
+import importlib, json, pathlib, subprocess
 for name in ['requests','UnityPy','PIL','Crypto.Cipher.AES','google.protobuf','boto3','idoly_story_index.runtime','idoly_story_index.publish','idoly_story_index.game_archive','idoly_story_index.master_source','idoly_story_index.music_index','idoly_story_index.textures']:
     importlib.import_module(name)
 importlib.import_module('fmod_toolkit')
@@ -15,6 +15,8 @@ assert subprocess.run(['dpkg-query','-W','-f=${Status}','ffmpeg'],stdout=subproc
 assert pathlib.Path('/usr/local/share/doc/ffmpeg/ffmpeg-5.1.9.tar.xz').is_file(), 'FFmpeg corresponding source missing'
 subprocess.run(['ffprobe','-version'],check=True,stdout=subprocess.DEVNULL)
 assert pathlib.Path('/app/scripts/build-idoly-data.py').is_file()
+for name in ('image-assets.json', 'character-portraits.json'):
+    assert json.loads((pathlib.Path('/app/deploy/docker')/name).read_text()), 'Missing deployment resource map: '+name
 assert not list(pathlib.Path('/app').glob('.env*')), 'Unexpected environment file in image'
 assert not pathlib.Path('/app/data').exists(), 'Downloaded assets must not be bundled'
 assert not list(pathlib.Path('/app').rglob('config.ini')), 'Unexpected private toolkit config'

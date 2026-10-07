@@ -1,4 +1,4 @@
-/** Pack a generated NAS snapshot into an offline, content-addressed R2 upload plan.
+/** Pack a generated Docker snapshot into an offline, content-addressed R2 upload plan.
  * No credentials, network, game extraction, or repository mutation is involved.
  */
 import {readFile,writeFile,mkdir,copyFile,readdir,stat} from 'node:fs/promises';

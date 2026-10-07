@@ -1,4 +1,4 @@
-"""First-start dialogue encoding settings, persisted in the NAS runtime volume."""
+"""First-start dialogue encoding settings, persisted in the updater runtime volume."""
 from dataclasses import asdict, dataclass
 import json
 import os
@@ -76,5 +76,5 @@ def load_voice_encoding(root, env):
         os.replace(temp, path)
     finally:
         Path(temp).unlink(missing_ok=True)
-    print(f'NAS: saved first-start dialogue encoding: {selected.label}', flush=True)
+    print(f'Updater: saved first-start dialogue encoding: {selected.label}', flush=True)
     return selected

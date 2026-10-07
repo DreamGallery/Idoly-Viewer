@@ -52,8 +52,8 @@ docker buildx build --platform linux/amd64 -f docker/Dockerfile.updater \
 
 使用预编译镜像时，在部署目录放置三个文件：
 
-- `deploy/nas/docker-compose.yaml` → `docker-compose.yaml`
-- `deploy/nas/.env.example` → `.env`，将 `IDOLY_UPDATER_IMAGE` 改成自己的标签或 digest
+- `deploy/docker/docker-compose.yaml` → `docker-compose.yaml`
+- `deploy/docker/.env.example` → `.env`，将 `IDOLY_UPDATER_IMAGE` 改成自己的标签或 digest
 - 已填配置 → `.env.r2.local`，权限 `600`
 
 然后执行 `docker compose pull`、`docker compose up -d`。容器无需开放端口、特权模式或 Docker socket。运行目录使用持久卷；迁移时保留该卷并先停止旧更新器。
