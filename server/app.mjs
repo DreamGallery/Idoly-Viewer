@@ -1,4 +1,5 @@
 import {inspectCsv,validateCsvAgainstScript} from './validate-csv.mjs';
+import {collaborationSources,validateSourceConfirmation} from './collaboration.mjs';
 import { resourceRequest } from './resources.mjs';
 import { createServer } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
@@ -10,7 +11,7 @@ const fail = (status, message) => Object.assign(new Error(message), { status });
 const random = () => randomBytes(32).toString('base64url');
 export function createApp(env = process.env, remoteFetch = fetch, services = {}) {
   const origin = new URL(env.CAMPUS_PUBLIC_ORIGIN || 'http://127.0.0.1:5173').origin;
-  const owner = env.CAMPUS_WORK_OWNER || 'DreamGallery', repo = env.CAMPUS_WORK_REPO || 'Idoly-localify-translations', branch = env.CAMPUS_WORK_BRANCH || 'main';
+  const owner = env.CAMPUS_WORK_OWNER || 'DreamGallery', repo = env.CAMPUS_WORK_REPO || 'Idoly-localify-translations', branch = env.CAMPUS_WORK_BRANCH || 'collaboration';
   const configured = !!(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET);
   const sessions = services.sessions || new Map(), pending = services.pending || new Map();
   const cookieName = 'idoly_session';
@@ -39,6 +40,16 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
   };
   const writable = p => /^(records\/[\w-]+\.json|(?:story\/human|story\/reviewed|story\/drafts\/translation|story\/drafts\/proofread|story\/backups\/translation|story\/backups\/proofread)\/.+\.csv|proofread_txt\/[\w-]+\.txt)$/.test(p);
   async function content(session, path, ref = branch) { return gh(session, 'GET', `contents/${filePath(path)}?ref=${encodeURIComponent(ref)}`); }
+  async function readWork(session, path, ref) {
+    const file = await content(session, path, ref);
+    const blob = file.encoding === 'none' || typeof file.content !== 'string'
+      ? await gh(session, 'GET', `git/blobs/${encodeURIComponent(file.sha)}`) : file;
+    if (typeof blob.content !== 'string') throw fail(502, '无法读取协作文件');
+    return Buffer.from(blob.content, 'base64').toString('utf8');
+  }
+  const workSources = collaborationSources({read:readWork, remoteFetch});
+  const workHead = async session => (await gh(session, 'GET', `git/ref/heads/${encodeURIComponent(branch)}`)).object.sha;
+  const useWorkSources = !services.localAuth && branch === 'collaboration';
   async function shaAt(session, path, ref) { try { return (await content(session, path, ref)).sha; } catch (e) { if (e.status === 404) return null; throw e; } }
   async function localFile(root, relative) {
     if (services.readFile) return services.readFile(root, relative);
@@ -112,9 +123,24 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
         res.setHeader('Set-Cookie', [cookie('campus_oauth', '', 0), cookie(cookieName, sid, 28800)]);
         return redirect(flow.returnTo);
       }
+      if (url.pathname.startsWith('/api/collaboration/source/') && req.method === 'GET') {
+        await requireCollaborator(session);
+        const id = decodeURIComponent(url.pathname.slice('/api/collaboration/source/'.length));
+        if (!/^adv_[\w-]+$/.test(id)) throw fail(400, '无效章节');
+        if (!useWorkSources) {
+          if (!services.sourceCsv) throw fail(503, '未配置协作原文');
+          const value = await services.sourceCsv(id), csv = typeof value === 'string' ? value : value.csv;
+          return json({csv, sha256:createHash('sha256').update(csv).digest('hex'), path:await services.sourcePath(id), label:value.label || '本地协作原文'});
+        }
+        return json(await workSources.source(session, await workHead(session), id));
+      }
       if (url.pathname.startsWith('/api/script/') && req.method === 'GET') {
         const id = decodeURIComponent(url.pathname.slice('/api/script/'.length));
         if (!/^[\w-]+$/.test(id)) throw fail(400, '无效章节');
+        if (url.searchParams.get('work') === '1' && useWorkSources) {
+          await requireCollaborator(session);
+          return json({txt:await workSources.raw(session, await workHead(session), id)});
+        }
         try { return json({ txt: await localFile((await sourceRoots()).adv, `${id}.txt`) }); }
         catch (e) { if (e.code === 'ENOENT') throw fail(404, '本地缺少此章节原始 TXT'); throw e; }
       }
@@ -156,11 +182,22 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
       }
       requireAuth();
       await requireCollaborator(session);
+      if (env.CAMPUS_COLLABORATION_MAINTENANCE === '1' && ['/api/github/issue','/api/github/commit'].includes(url.pathname)) throw fail(503, '协作分支正在切换，暂时无法远端保存；请保留浏览器草稿，稍后重新连接');
       if (url.pathname === '/api/github/issue') {
         if (!Number.isSafeInteger(input.number) || !input.expectedUpdatedAt) throw fail(400, '缺少任务版本');
         const current = await gh(session, 'GET', `issues/${input.number}`);
         if (current.updated_at !== input.expectedUpdatedAt || current.body !== input.expectedBody) throw fail(409, '任务认领已变化，请刷新');
         if (typeof input.body !== 'string' || input.body.length > 60000 || !['open', 'closed'].includes(input.state)) throw fail(400, '无效任务更新');
+        if (useWorkSources && /^adv_[\w-]+$/.test(current.title) && /<!--\s*(?:tr|pr):[^>]*:完成\s*-->/.test(input.body)) {
+          const head = await workHead(session), entry = await workSources.entry(session, head, current.title);
+          const record = JSON.parse(await readWork(session, `records/${current.title}.json`, head));
+          if (record.source_change?.status === 'needs-confirmation') throw fail(409, '原文迁移尚未确认，请先完成稿件核对');
+          for (const [key,value] of Object.entries({source_sha256:entry.source_sha256, source_commit:entry.source_commit, source_raw_path:entry.raw_path, data_branch:branch})) {
+            const marker = `<!-- ${key}: ${value} -->`, pattern = new RegExp(`<!--\\s*${key}:.*?-->`, 'g');
+            input.body = pattern.test(input.body) ? input.body.replace(pattern, marker) : input.body+'\n'+marker;
+          }
+          input.body = input.body.replace(/<!--\s*source_review_required:.*?-->/g, '').replace(/<!-- source-review-notice:start -->[\s\S]*?<!-- source-review-notice:end -->/g,'');
+        }
         // Issues have no atomic compare-and-swap; perform a fresh ownership check before updating.
         return json(await gh(session, 'PATCH', `issues/${input.number}`, { body: input.body, state: input.state, assignees: input.assignees }));
       }
@@ -171,6 +208,7 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
           if (!writable(f.path) || !(typeof f.content === 'string' || f.content === null) || !(typeof f.expectedSha === 'string' || f.expectedSha === null)) throw fail(400, '提交缺少基准版本或路径不允许');
         }
         if (new Set(input.files.map(f => f.path)).size !== input.files.length) throw fail(400, '提交包含重复路径');
+        for (let attempt = 0; attempt < 3; attempt++) {
         const ref = await gh(session, 'GET', `git/ref/heads/${encodeURIComponent(branch)}`);
         const head = ref.object.sha;
         // Reject stale source/invalid translation even if the caller bypasses browser validation.
@@ -180,7 +218,7 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
             try {
               const csv = Buffer.from(f.content, 'base64').toString('utf8');
               parsed = inspectCsv(csv);
-              const roots = await sourceRoots();
+              const roots = useWorkSources ? null : await sourceRoots();
               const backup = f.path.match(/^story\/backups\/(translation|proofread)\/(.+)$/);
               if (backup) {
                 const formalPath = `story/${backup[1] === 'translation' ? 'human' : 'reviewed'}/${backup[2]}`;
@@ -194,11 +232,19 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
                   ? await gh(session, 'GET', `git/blobs/${encodeURIComponent(existing.sha)}`) : existing;
                 if (typeof existingBlob.content !== 'string' || !Buffer.from(existingBlob.content, 'base64').equals(bytes)) throw new Error('备份与仓库现有正式稿不一致');
               } else {
-                const raw = await localFile(roots.adv, parsed.id + '.txt');
+                const raw = useWorkSources ? await workSources.raw(session, head, parsed.id) : await localFile(roots.adv, parsed.id + '.txt');
+                if (useWorkSources && /^story\/(human|reviewed)\//.test(f.path)) {
+                  let before = null;
+                  try { before = JSON.parse(await readWork(session, `records/${parsed.id}.json`, head)); } catch (e) { if (e.status !== 404) throw e; }
+                  const recordFile = input.files.find(file => file.path === `records/${parsed.id}.json` && file.content !== null);
+                  const after = recordFile ? JSON.parse(Buffer.from(recordFile.content, 'base64').toString('utf8')) : null;
+                  validateSourceConfirmation(before, after, parsed.info.text, session.user.login);
+                  if (parsed.records.some(row => !['info','译者'].includes(row.id) && row.text && !row.trans.trim())) throw new Error('正式稿仍有未翻译文本');
+                }
                 validateCsvAgainstScript(csv, raw, {checkLength: !f.path.startsWith('story/drafts/')});
               }
-              const manifest = services.sourcePath ? null : JSON.parse(await localFile(roots.web, 'catalog/manifest.json'));
-              const relative = services.sourcePath ? await services.sourcePath(parsed.id) : JSON.parse(await localFile(roots.web, manifest.base_path.replace(/^\//, '') + '/chapters/' + parsed.id + '.json')).csv_path;
+              const manifest = useWorkSources || services.sourcePath ? null : JSON.parse(await localFile(roots.web, 'catalog/manifest.json'));
+              const relative = useWorkSources ? (await workSources.entry(session, head, parsed.id)).csv_path : services.sourcePath ? await services.sourcePath(parsed.id) : JSON.parse(await localFile(roots.web, manifest.base_path.replace(/^\//, '') + '/chapters/' + parsed.id + '.json')).csv_path;
               if (!relative || !['story/human/', 'story/reviewed/', 'story/drafts/translation/', 'story/drafts/proofread/', 'story/backups/translation/', 'story/backups/proofread/'].some(prefix => f.path === prefix + relative)) throw new Error('提交目录与剧情索引不一致');
             } catch (error) { throw fail(400, error.message); }
           }
@@ -214,8 +260,10 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
         const newTree = await gh(session, 'POST', 'git/trees', { base_tree: commit.tree.sha, tree });
         const next = await gh(session, 'POST', 'git/commits', { message: String(input.message || '更新剧情翻译').slice(0, 200), tree: newTree.sha, parents: [head] });
         // force:false also rejects a concurrent push after the comparison above.
-        await gh(session, 'PATCH', `git/refs/heads/${encodeURIComponent(branch)}`, { sha: next.sha, force: false });
+        try { await gh(session, 'PATCH', `git/refs/heads/${encodeURIComponent(branch)}`, { sha: next.sha, force: false }); }
+        catch (e) { if ([409,422].includes(e.status) && attempt < 2) continue; throw e; }
         return json({ sha: next.sha, files: tree.map(f => ({ path: f.path, sha: f.sha })) });
+        }
       }
       throw fail(404, '接口不存在');
     } catch (error) {

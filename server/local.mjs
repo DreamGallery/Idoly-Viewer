@@ -33,12 +33,12 @@ export async function createLocalRepo({directory=resolve(root,'.local'),catalogP
   if(p.startsWith('contents/')){const path=p.slice(9);if(path.split('/').some(x=>x==='..'||x==='.'))return response({},400);const value=await content(path);return value===null?response({},404):response({sha:hash(value),content:Buffer.from(value).toString('base64')})}
   if(p==='issues'){const page=Number(u.searchParams.get('page')||1);return response(catalog.stories.slice((page-1)*100,page*100).map(s=>issue(byId.get(s.id))))}
   if(/^issues\/\d+$/.test(p)){const n=Number(p.split('/')[1]),s=catalog.stories[n-1];if(!s)return response({},404);const previous=issue(byId.get(s.id));if(method==='PATCH'){saved.issues[n]={...previous,...body,updated_at:new Date(Math.max(Date.now(),Date.parse(previous.updated_at)+1)).toISOString()};await persist();return response(saved.issues[n])}return response(previous)}
-  if(p==='git/ref/heads/main')return response({object:{sha:saved.head}});
+  if(p==='git/ref/heads/collaboration')return response({object:{sha:saved.head}});
   if(p.startsWith('git/commits/')&&method==='GET')return response({sha:saved.head,tree:{sha:saved.head}});
   if(p==='git/blobs'){const value=Buffer.from(body.content,'base64').toString('utf8'),sha=hash(value);objects.set(sha,{value});return response({sha})}
   if(p==='git/trees'){const sha=randomUUID();objects.set(sha,{tree:body.tree});return response({sha})}
   if(p==='git/commits'){const sha=randomUUID();objects.set(sha,{...body});return response({sha})}
-  if(p==='git/refs/heads/main'&&method==='PATCH'){
+  if(p==='git/refs/heads/collaboration'&&method==='PATCH'){
    const commit=objects.get(body.sha);if(!commit||commit.parents[0]!==saved.head||body.force)return response({},409);
    const tree=objects.get(commit.tree)?.tree;if(!tree)return response({},400);
    for(const item of tree){saved.files[item.path]=item.sha===null?null:objects.get(item.sha).value}
@@ -51,7 +51,7 @@ export async function createLocalRepo({directory=resolve(root,'.local'),catalogP
 }
 export async function startLocal({port=8787,directory}={}){
  const repo=await createLocalRepo({directory});
- const server=createApp({CAMPUS_PUBLIC_ORIGIN:'http://127.0.0.1:5173',CAMPUS_WORK_OWNER:'DreamGallery',CAMPUS_WORK_REPO:'Idoly-localify-translations',CAMPUS_WORK_BRANCH:'main',CAMPUS_WEB_DATA:resolve(root,'public'),CAMPUS_ADV_ROOT:resolve(root,'../Hoshimi-Adv/Resource')},repo.remoteFetch,{localAuth:true,sourcePath:async id=>repo.byId.get(id)?.path,sourceCsv:async id=>{const s=repo.byId.get(id);if(!s)throw Object.assign(Error('剧情不存在'),{status:404});for(const prefix of ['story/reviewed/','story/human/','story/ai/']){const csv=await repo.content(prefix+s.path);if(csv!==null)return {csv,label:({'story/reviewed/':'人工校对稿','story/human/':'人工翻译稿','story/ai/':'AI 初译 · 待校对'})[prefix]}}return readFile(resolve(root,'../Hoshimi-Adv/CSV',s.path),'utf8')}});
+ const server=createApp({CAMPUS_PUBLIC_ORIGIN:'http://127.0.0.1:5173',CAMPUS_WORK_OWNER:'DreamGallery',CAMPUS_WORK_REPO:'Idoly-localify-translations',CAMPUS_WORK_BRANCH:'collaboration',CAMPUS_WEB_DATA:resolve(root,'public'),CAMPUS_ADV_ROOT:resolve(root,'../Hoshimi-Adv/Resource')},repo.remoteFetch,{localAuth:true,sourcePath:async id=>repo.byId.get(id)?.path,sourceCsv:async id=>{const s=repo.byId.get(id);if(!s)throw Object.assign(Error('剧情不存在'),{status:404});for(const prefix of ['story/reviewed/','story/human/','story/ai/']){const csv=await repo.content(prefix+s.path);if(csv!==null)return {csv,label:({'story/reviewed/':'人工校对稿','story/human/':'人工翻译稿','story/ai/':'AI 初译 · 待校对'})[prefix]}}return readFile(resolve(root,'../Hoshimi-Adv/CSV',s.path),'utf8')}});
  const media=await localMediaHandler(root);
  const original=server.listeners('request')[0];server.removeAllListeners('request');server.on('request',async(req,res)=>{if(!await media(req,res))original(req,res)});
  await new Promise(resolve=>server.listen(port,'127.0.0.1',resolve));return server;

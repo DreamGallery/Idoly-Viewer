@@ -184,3 +184,19 @@ test('real Unicode task categories survive parsing, draft and completion paths',
   assert.ok(w.written.some(f=>f.path===`story/human/${relative}`));
  }
 });
+
+import {DraftAutosave} from './autosave';
+const pause = (ms=20) => new Promise(resolve => setTimeout(resolve,ms));
+test('autosave coalesces typing and serializes edits arriving during a save',async()=>{
+ const calls:string[]=[],results:string[]=[];let finish:()=>void=()=>{};
+ const queue=new DraftAutosave(async value=>{calls.push(value);if(calls.length===1)await new Promise<void>(r=>{finish=r})},value=>results.push(value),5);
+ queue.update('old');queue.update('current');await pause();
+ queue.update('edited while saving');await pause();assert.deepEqual(calls,['current']);
+ finish();await pause();assert.deepEqual(calls,['current','edited while saving']);assert.deepEqual(results,calls);queue.stop();
+});
+test('autosave stops on conflict and cancels pending saves on disconnect',async()=>{
+ let calls=0,failures=0;
+ const queue=new DraftAutosave(async()=>{calls++;throw Error('conflict')},(_v,e)=>{if(e)failures++},5);
+ queue.update('first');await pause();queue.update('second');await pause();assert.equal(calls,1);assert.equal(failures,1);queue.stop();
+ const closed=new DraftAutosave(async()=>{calls++},()=>{},5);closed.update('pending');closed.stop();await pause();assert.equal(calls,1);
+});

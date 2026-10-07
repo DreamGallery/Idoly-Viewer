@@ -19,7 +19,7 @@ import { storyKind } from './document-filter'
 export const WORK_OWNER = import.meta.env.VITE_WORK_OWNER || 'DreamGallery'
 export const WORK_REPO =
   import.meta.env.VITE_WORK_REPO || 'Idoly-localify-translations'
-export const WORK_BRANCH = import.meta.env.VITE_WORK_BRANCH || 'main'
+export const WORK_BRANCH = import.meta.env.VITE_WORK_BRANCH || 'collaboration'
 
 export const STATES = ['待认领', '进行中', '完成'] as const
 export type TrackState = (typeof STATES)[number]
@@ -617,7 +617,7 @@ export function campusRawUrl(flatTxtName: string, version = ''): string {
 
 // 取原始 txt：campus 权威源优先，工作仓库 raw/ 兜底
 export async function fetchRawTxt(title: string): Promise<string | null> {
-  const response = await fetch(resourceUrl('/api/script/' + encodeURIComponent(title)))
+  const response = await fetch(resourceUrl('/api/script/' + encodeURIComponent(title)+'?work=1'))
   if (!response.ok) throw new Error('无法读取当前原始脚本')
   return (await response.json()).txt
 }
@@ -1031,11 +1031,18 @@ export async function completeStage(
     contentB64: string
     operatorGithub: string
     baseRevision: number
+    confirmSource?: boolean
   }
 ): Promise<{ directProofread: boolean; commitSha: string }> {
   const { fileId, role, sourcePath, operatorGithub, baseRevision } = opts
   const key = role === 'tr' ? 'translation' : 'proofread'
   const record = await fetchRecordForWrite(wrapper, fileId)
+  if (record.source_change?.status === 'needs-confirmation') {
+    const sourceHash = extractInfoFromCsvText(base64ToUtf8(opts.contentB64)).sourceHash
+    if (!opts.confirmSource || record.source_change.source_sha256 !== sourceHash) throw new Error('请核对更新后的原文并确认后再完成')
+    record.source_change.status = 'confirmed'
+    record.source_confirmation = {source_sha256:sourceHash, confirmed_by:operatorGithub, confirmed_at:new Date().toISOString()}
+  }
   const current = Number(record[key]?.revision || 0)
   if (baseRevision >= 0 && current !== baseRevision)
     throw new StaleRevisionError(

@@ -10,8 +10,8 @@ export function translatedScript(raw: string, rows: CsvDataLine[]): string {
   if (errors.length) throw new Error(errors.slice(0, 5).join('；'));
   return mergeScriptText(raw, rows);
 }
-export async function exportTxt(id: string, csv: string): Promise<string> {
-  const { txt } = await api<{ txt: string }>('script/' + encodeURIComponent(id));
+export async function exportTxt(id: string, csv: string, collaboration = false): Promise<string> {
+  const { txt } = await api<{ txt: string }>('script/' + encodeURIComponent(id) + (collaboration ? '?work=1' : ''));
   const parsed=extractInfoFromCsvText(csv);
   const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(txt))),b=>b.toString(16).padStart(2,'0')).join('');
   if(hash!==parsed.sourceHash)throw new Error('原始脚本版本不一致，请重新载入后导出');

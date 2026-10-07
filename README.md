@@ -58,7 +58,7 @@ npm run test:cloudflare
 
 ## 翻译协作
 
-稿件保存到配置的 GitHub 工作仓库；任务来自该仓库按协作格式创建的 Issue。CSV 保留 `id,name,text,trans` 四列，末尾依次为 `info` 与 `译者` 行。
+稿件实时保存到 GitHub 工作仓库的 `collaboration` 分支；每日发布前，将已完成并通过校验的内容汇总为一条提交进入 `main`，再发布文本。任务使用该仓库的 Issue。CSV 保留 `id,name,text,trans` 四列，末尾依次为 `info` 与 `译者` 行。
 
 - 完成翻译：署名为 `翻译：XXXX`。
 - 完成校对：追加 `；校对：XXXX`。

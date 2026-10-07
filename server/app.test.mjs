@@ -5,7 +5,7 @@ import { createApp } from './app.mjs';
 const origin = 'http://127.0.0.1:5173';
 async function fixture(t, extra = async () => new Response('{}', {status:404}), push = true, services = {}) {
   const calls=[];
-  const app=createApp({GITHUB_CLIENT_ID:'test-id',GITHUB_CLIENT_SECRET:'test-secret',CAMPUS_PUBLIC_ORIGIN:origin},async (url, opts) => {
+  const app=createApp({GITHUB_CLIENT_ID:'test-id',GITHUB_CLIENT_SECRET:'test-secret',CAMPUS_PUBLIC_ORIGIN:origin,CAMPUS_WORK_BRANCH:'main'},async (url, opts) => {
     assert.equal(opts.redirect,'manual', 'GitHub requests must use the Workers-compatible non-following redirect mode');
     calls.push([url,opts]);
     if(url.endsWith('/access_token')) return Response.json({access_token:'private-token',expires_in:28800});

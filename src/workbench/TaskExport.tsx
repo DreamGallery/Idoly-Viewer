@@ -18,7 +18,7 @@ export function TaskExport({ tasks, auth }: { tasks: DocTask[]; auth: Auth }) {
         try {
           if (!/^[\w-]+$/.test(task.title)) throw new Error('无效章节名');
           const csv = await taskCsv(w, task, stage);
-          files[task.title + '.' + format] = strToU8(format === 'csv' ? '\uFEFF' + csv.replace(/^\uFEFF/, '') : await exportTxt(task.title, csv));
+          files[task.title + '.' + format] = strToU8(format === 'csv' ? '\uFEFF' + csv.replace(/^\uFEFF/, '') : await exportTxt(task.title, csv, true));
         } catch (e) { failures.push(`${task.title}：${e instanceof Error ? e.message : String(e)}`); }
       }
       const count = Object.keys(files).length;

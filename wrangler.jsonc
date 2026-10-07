@@ -23,7 +23,7 @@
     "IDOLY_R2_PREFIX": "idoly-v1",
     "CAMPUS_WORK_OWNER": "DreamGallery",
     "CAMPUS_WORK_REPO": "Idoly-localify-translations",
-    "CAMPUS_WORK_BRANCH": "main"
+    "CAMPUS_WORK_BRANCH": "collaboration"
   },
   "r2_buckets": [
     {
