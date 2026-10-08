@@ -268,9 +268,18 @@ test('large objects and download archives are not cached; latest-five membership
   const cache=timedCache(),data=resources({RESOURCES:bucket,IDOLY_R2_PREFIX:'large'},{cache});
   const key='media/'+'a'.repeat(64)+'/card.mp4';await bucket.put('large/'+key,new Uint8Array(8*1024*1024+1));
   const media=await data.route(request('/'+key));assert.equal((await media.arrayBuffer()).byteLength,8*1024*1024+1);assert.equal(cache.entries.size,0);
-  const name='idoly-resources-r100-abcdef123456.tar.gz';await bucket.put('large/downloads/'+name,'archive');
+  const name='idoly-resources-r100-abcdef123456.tar.gz';await bucket.put('large/downloads/'+name,'archive',{httpMetadata:{cacheControl:'public, max-age=31536000, immutable'}});
   await bucket.put('large/current.json',JSON.stringify({release:'r1',versions:{versions:[{filename:name}]}}));
-  assert.equal(await(await data.route(request('/api/resources/download/'+name))).text(),'archive');
+  const path='/api/resources/download/'+name;
+  const download=await data.route(request(path));
+  assert.equal(download.headers.get('Cache-Control'),'no-store');assert.equal(await download.text(),'archive');
+  for(const init of [{method:'HEAD'},{headers:{Range:'bytes=1-3'}},{headers:{'If-None-Match':download.headers.get('ETag')}}]) {
+    const response=await data.route(request(path,init));assert.equal(response.headers.get('Cache-Control'),'no-store');await response.arrayBuffer();
+  }
+  const direct=resources({RESOURCES:bucket,IDOLY_R2_PREFIX:'large',IDOLY_R2_PUBLIC_BASE_URL:'https://assets.test'},{cache});
+  const redirect=await direct.route(request(path));
+  assert.equal(redirect.status,302);assert.equal(redirect.headers.get('Cache-Control'),'no-store');
+  assert.equal(redirect.headers.get('Location'),'https://assets.test/large/downloads/'+name);
   assert.ok(![...cache.entries.keys()].some(key=>key.includes('/downloads/')));
   await bucket.put('large/current.json',JSON.stringify({release:'r2',versions:{versions:[]}}));cache.advance(31);
   await assert.rejects(()=>data.route(request('/api/resources/download/'+name)),{status:404});

@@ -204,8 +204,9 @@ def upload_batch(s3,bucket,prefix,jobs,label,workers=4,inventory=None):
                 elif path.suffix=='.json':mime='application/json; charset=utf-8'
                 elif path.suffix=='.txt':mime='text/plain; charset=utf-8'
                 elif path.name.endswith('.tar.gz'):mime='application/gzip'
+                cache_control='no-store' if key.startswith('downloads/') else 'public, max-age=31536000, immutable'
                 s3.upload_file(str(path),bucket,prefix+'/'+key,ExtraArgs={'ContentType':mime,
-                    'CacheControl':'public, max-age=31536000, immutable','Metadata':{'sha256':sha}},Callback=progress.transfer)
+                    'CacheControl':cache_control,'Metadata':{'sha256':sha}},Callback=progress.transfer)
                 uploaded.append(key);progress.finish('uploaded')
             except Exception:progress.finish('failed');raise
         with ThreadPoolExecutor(max_workers=workers) as pool:list(pool.map(upload,jobs.items()))

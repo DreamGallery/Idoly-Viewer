@@ -99,7 +99,7 @@ class PublicationTests(unittest.TestCase):
 
     def test_upload_checks_use_bulk_listings_without_head_requests(self):
         class S3:
-            def __init__(self):self.objects={};self.listings=0;self.uploads=0
+            def __init__(self):self.objects={};self.listings=0;self.uploads=0;self.headers={}
             def get_paginator(self,operation):
                 self.assert_operation=operation;return self
             def paginate(self,**kwargs):
@@ -107,14 +107,26 @@ class PublicationTests(unittest.TestCase):
                 return [{'Contents':[{'Key':k,'Size':v} for k,v in self.objects.items() if k.startswith(kwargs['Prefix'])]}]
             def upload_file(self,path,bucket,key,**kwargs):
                 self.objects[key]=Path(path).stat().st_size;self.uploads+=1
+                self.headers[key]=kwargs['ExtraArgs']
                 kwargs['Callback'](self.objects[key])
             def head_object(self,**kwargs):raise AssertionError('Per-file HEAD forbidden')
         with tempfile.TemporaryDirectory() as temp:
             stage=self.fixture(temp);_,jobs=snapshot_plan(stage);s3=S3()
             upload_batch(s3,'bucket','prefix',jobs,'test',1)
             self.assertEqual(s3.uploads,len(jobs));self.assertEqual(s3.listings,4)
+            self.assertTrue(all(headers['CacheControl']=='public, max-age=31536000, immutable'
+                                for headers in s3.headers.values()))
             upload_batch(s3,'bucket','prefix',jobs,'repeat',1)
             self.assertEqual(s3.uploads,len(jobs));self.assertEqual(s3.listings,6)
+            archive=stage/'idoly-resources-r1067-abcdef123456.tar.gz'
+            archive.write_bytes(b'archive')
+            key='downloads/'+archive.name
+            upload_batch(s3,'bucket','prefix',{key:(archive,hashlib.sha256(archive.read_bytes()).hexdigest())},'archive',1)
+            self.assertEqual(s3.headers['prefix/'+key]['CacheControl'],'no-store')
+            self.assertEqual(s3.headers['prefix/'+key]['ContentType'],'application/gzip')
+            uploads=s3.uploads
+            upload_batch(s3,'bucket','prefix',{key:(archive,hashlib.sha256(archive.read_bytes()).hexdigest())},'archive repeat',1)
+            self.assertEqual(s3.uploads,uploads)
 
     def fixture(self,temp):
         stage=Path(temp)/'release';(stage/'web/data').mkdir(parents=True)

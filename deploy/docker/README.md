@@ -1,6 +1,6 @@
 # 使用 Docker 运行资源更新器
 
-镜像：`dreamgallery/idoly-r2-updater:20261008-cf10`，架构 `linux/amd64`。
+镜像：`dreamgallery/idoly-r2-updater:cf11`，架构 `linux/amd64`。
 
 1. 将本目录的 `docker-compose.yaml` 放到部署目录。
 2. 将 [配置模板](../.env.r2.example)复制为同目录下的 `.env.r2.local`，按 [部署教程](../../docs/cloudflare-deployment.md)填写。
