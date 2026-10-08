@@ -6,8 +6,12 @@ export function acceptResourceSnapshot(response: Response) {
 }
 export function resourceCatalogBase(): string { return release ? '/catalog/releases/' + release : '/catalog'; }
 export function resourceUrl(path: string): string {
-  if (!release || !/^\/(?:data\/|images\/|api\/(?:media|source|script)\/|catalog\/)/.test(path) || path.startsWith('/catalog/releases/')) return path;
+  if (!release || !/^\/(?:data\/|images\/|api\/(?:media|source|original|script)\/|catalog\/)/.test(path) || path.startsWith('/catalog/releases/')) return path;
   const url = new URL(path, 'https://snapshot.invalid');
+  if (url.pathname.startsWith('/api/script/') && url.searchParams.get('work') === '1') {
+    url.searchParams.delete('release');
+    return url.pathname + url.search + url.hash;
+  }
   url.searchParams.set('release', release);
   return url.pathname + url.search + url.hash;
 }

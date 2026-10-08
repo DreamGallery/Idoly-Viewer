@@ -16,7 +16,6 @@ export async function createLocalRepo({directory=resolve(root,'.local'),catalogP
  const issue=s=>saved.issues[s.number]||{number:s.number,title:s.id,body:`<!-- ai_path: story/ai/${s.path} -->\n<!-- translated_path: story/human/${s.path} -->\n<!-- proofread_path: story/reviewed/${s.path} -->\n<!-- tr::待认领 -->\n<!-- pr::待认领 -->`,updated_at:'2026-09-30T00:00:00.000Z',state:'open',labels:[],assignees:[]};
  async function content(path){
   if(Object.hasOwn(saved.files,path))return saved.files[path];
-  if(path==='users.json')return JSON.stringify({});
   if(path==='glossary/names.json')return readFile(resolve(translations,path),'utf8');
   if(/^story\/(ai|human|reviewed)\//.test(path)&&catalog.stories.some(s=>path.endsWith('/'+s.path))){try{return await readFile(resolve(translations,path),'utf8')}catch(e){if(e.code!=='ENOENT')throw e}}
   return null;
@@ -51,7 +50,7 @@ export async function createLocalRepo({directory=resolve(root,'.local'),catalogP
 }
 export async function startLocal({port=8787,directory}={}){
  const repo=await createLocalRepo({directory});
- const server=createApp({CAMPUS_PUBLIC_ORIGIN:'http://127.0.0.1:5173',CAMPUS_WORK_OWNER:'DreamGallery',CAMPUS_WORK_REPO:'Idoly-localify-translations',CAMPUS_WORK_BRANCH:'collaboration',CAMPUS_WEB_DATA:resolve(root,'public'),CAMPUS_ADV_ROOT:resolve(root,'../Hoshimi-Adv/Resource')},repo.remoteFetch,{localAuth:true,sourcePath:async id=>repo.byId.get(id)?.path,sourceCsv:async id=>{const s=repo.byId.get(id);if(!s)throw Object.assign(Error('剧情不存在'),{status:404});for(const prefix of ['story/reviewed/','story/human/','story/ai/']){const csv=await repo.content(prefix+s.path);if(csv!==null)return {csv,label:({'story/reviewed/':'人工校对稿','story/human/':'人工翻译稿','story/ai/':'AI 初译 · 待校对'})[prefix]}}return readFile(resolve(root,'../Hoshimi-Adv/CSV',s.path),'utf8')}});
+ const server=createApp({CAMPUS_PUBLIC_ORIGIN:'http://127.0.0.1:5173',CAMPUS_WORK_OWNER:'DreamGallery',CAMPUS_WORK_REPO:'Idoly-localify-translations',CAMPUS_WORK_BRANCH:'collaboration',CAMPUS_WEB_DATA:resolve(root,'public'),CAMPUS_ADV_ROOT:resolve(root,'../Hoshimi-Adv/Resource')},repo.remoteFetch,{localAuth:true,sourcePath:async id=>repo.byId.get(id)?.path,sourceCsv:async id=>{const s=repo.byId.get(id);if(!s)throw Object.assign(Error('剧情不存在'),{status:404});return readFile(resolve(root,'../Hoshimi-Adv/CSV',s.path),'utf8')}});
  const media=await localMediaHandler(root);
  const original=server.listeners('request')[0];server.removeAllListeners('request');server.on('request',async(req,res)=>{if(!await media(req,res))original(req,res)});
  await new Promise(resolve=>server.listen(port,'127.0.0.1',resolve));return server;

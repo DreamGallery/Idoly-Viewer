@@ -1,6 +1,5 @@
 """Docker updater: GitHub text/MasterDB -> Octo media -> snapshot -> R2."""
 import argparse
-import csv
 from concurrent.futures import ThreadPoolExecutor
 import fcntl
 import hashlib
@@ -20,7 +19,8 @@ from .master_source import fetch_master, REPO_PATTERN
 from .media import materialize
 from .music_index import music_index
 from .octo_source import update_manifest
-from .publish import connect, digest, read_current, publish, Progress
+from .publish import connect, digest, read_current, publish, Progress, public_media_base
+from .public_text import original_csv
 from .downloads import download_bytes
 
 
@@ -159,7 +159,7 @@ def build_snapshot(root,stage,master,toolkit,source,translations,manifest,worker
     subprocess.run([sys.executable,str(ROOT/'scripts/build-idoly-data.py'),
         '--master',str(master),'--toolkit',str(toolkit),'--source',str(source),
         '--translations',str(translations),'--output',str(web/'data'),
-        '--report',str(stage/'data-validation.json')],check=True)
+        '--report',str(stage/'data-validation.json'),'--original-only'],check=True)
     if load(stage/'data-validation.json')['warnings']:
         raise ValueError('Translated script validation failed; inspect this release data-validation.json before publication')
     build(master,toolkit,source,translations,web/'data',report=stage/'index-report.json',history_cache=None,voice_extension=voice_encoding.extension)
@@ -169,19 +169,10 @@ def build_snapshot(root,stage,master,toolkit,source,translations,manifest,worker
     for story in catalog['stories']:
         relative=Path(story['path'])
         original=source/'CSV'/relative
-        def signature(path):
-            with path.open(encoding='utf-8-sig',newline='') as stream:
-                rows=list(csv.DictReader(stream))
-            return [(r['id'],r['name'],r['text']) for r in rows if r['id']!='译者']
-        selected,label=original,'原文'
-        source_signature=signature(original)
-        for layer,title in [('reviewed','人工校对稿'),('human','人工翻译稿'),('ai','AI 初译 · 待翻译')]:
-            candidate=translations/'story'/layer/relative
-            if candidate.is_file() and signature(candidate)==source_signature:
-                selected,label=candidate,title;break
-        link_file(selected,stage/'story'/relative)
+        target=stage/'story'/relative;target.parent.mkdir(parents=True,exist_ok=True)
+        target.write_bytes(original_csv(original.read_bytes().decode('utf-8-sig')).encode())
         chapter_path=web/'catalog/chapters'/(story['id']+'.json')
-        chapter=load(chapter_path);chapter['label']=label;save(chapter_path,chapter)
+        chapter=load(chapter_path);chapter['label']='原文';save(chapter_path,chapter)
         link_file(source/'Resource'/(story['id']+'.txt'),stage/'adv'/(story['id']+'.txt'))
     manifest_json=load(web/'catalog/manifest.json')
     manifest_json['base_path']='/catalog/releases/'+stage.name
@@ -206,6 +197,7 @@ def fingerprint(inputs):
 def run_once(root,env=os.environ,prepare_only=False):
     root.mkdir(parents=True,exist_ok=True)
     token=env.get('IDOLY_GITHUB_TOKEN','')
+    public_base=public_media_base(env.get('IDOLY_R2_PUBLIC_BASE_URL',''))
     s3,bucket,prefix=connect(env) if not prepare_only else (None,None,None)
     remote,etag=read_current(s3,bucket,prefix) if s3 else (None,None)
     previous=root/'releases'/remote['release'] if remote else None
@@ -222,7 +214,8 @@ def run_once(root,env=os.environ,prepare_only=False):
     shutil.copyfile(ROOT/'vendor/hoshimi/src/adv_csv.py',toolkit/'src/adv_csv.py')
     print('Updater: checking Octo resource manifest',flush=True)
     manifest=update_manifest(toolkit/'cache/OctoManifest.json',env)
-    inputs={'voice_encoding':voice_encoding.to_dict(),'source':source_commit,'translations':translation_commit,'master':master_info,'octo':digest(toolkit/'cache/OctoManifest.json')}
+    inputs={'voice_encoding':voice_encoding.to_dict(),'source':source_commit,'translations':translation_commit,'master':master_info,'octo':digest(toolkit/'cache/OctoManifest.json'),
+            'public_media_base':public_base,'r2_prefix':env.get('IDOLY_R2_PREFIX','idoly-v1'),'text_policy':'original-only'}
     identity=fingerprint(inputs)
     if previous and load(previous/'complete.json')['fingerprint']==identity:
         print('Updater: inputs unchanged; retaining current release',flush=True)
@@ -244,7 +237,7 @@ def run_once(root,env=os.environ,prepare_only=False):
         versions=load(stage/'resource-versions.json')
     if prepare_only:
         print('Updater: complete local snapshot prepared; no R2 upload: '+release,flush=True);return
-    publish(s3,bucket,prefix,stage,versions,etag,root/'downloads',max(1,min(8,int(env.get('IDOLY_UPLOAD_WORKERS','4')))))
+    publish(s3,bucket,prefix,stage,versions,etag,root/'downloads',max(1,min(8,int(env.get('IDOLY_UPLOAD_WORKERS','4')))),public_base=public_base)
     save(root/'last-success.json',{'release':release,'fingerprint':identity,'at':int(time.time())})
     # Delete only archives previously recorded by this updater, after publication.
     retained={v['filename'] for v in versions['versions']}

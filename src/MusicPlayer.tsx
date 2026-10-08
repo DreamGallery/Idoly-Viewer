@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Disc3, Headphones, ListMusic, Loader2, Maximize2, Music2, Pause, Play, Repeat, Repeat1, Search, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import './music-player.css';
 import { resourceJson } from './resource-snapshot';
@@ -7,6 +7,20 @@ type Track = { id: string; title: string; originalTitle: string; artist: string;
 type Mode = 'repeat' | 'single' | 'shuffle';
 const modeLabels = { repeat: '列表循环', single: '单曲循环', shuffle: '随机播放' };
 const clock = (value: number) => `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
+
+const MusicLibrary = memo(function MusicLibrary({ tracks, currentId, query, onQueryChange, onChoose }: {
+  tracks: Track[]; currentId?: string; query: string; onQueryChange: (query: string) => void; onChoose: (index: number) => void;
+}) {
+  const filtered = useMemo(() => {
+    const search = query.toLowerCase();
+    return tracks.map((track, index) => ({ track, index })).filter(({ track }) =>
+      `${track.title} ${track.originalTitle} ${track.artist}`.toLowerCase().includes(search));
+  }, [tracks,query]);
+  return <section className="music-library" aria-label="音乐曲库"><div className="music-library-heading"><h3><ListMusic size={18}/>曲目列表</h3><span>{tracks.length} 首</span></div><label className="music-search"><Search size={16}/><input aria-label="搜索音乐" value={query} placeholder="搜索歌曲或演唱者" onChange={event=>onQueryChange(event.target.value)}/></label>
+    <div className="music-queue">{filtered.map(({track: item,index})=><button key={item.id} className={`music-queue-item ${currentId===item.id?'is-current':''}`} aria-label={`播放 ${item.title} · ${item.artist}`} aria-pressed={currentId===item.id} onClick={()=>onChoose(index)}><img src={item.cover} alt="" loading="lazy"/><span><strong>{item.title}</strong><small>{item.artist}</small></span>{currentId===item.id?<span className="music-queue-dot"/>:<Play size={14}/>}</button>)}{!filtered.length&&<p className="music-no-results">{tracks.length?'没有找到这首歌':'曲库正在准备中'}</p>}</div>
+    <div className="music-library-note"><Disc3 size={15}/><span>IDOLY PRIDE · GAME SOUNDTRACK</span></div>
+  </section>;
+});
 
 export default function MusicPlayer() {
   const audio = useRef<HTMLAudioElement>(null);
@@ -81,7 +95,7 @@ export default function MusicPlayer() {
     return () => { document.body.style.overflow = previous; };
   }, [expanded]);
 
-  const start = () => {
+  const start = useCallback(() => {
     const player = audio.current;
     if (!player || !track) return;
     wantsPlay.current = true; setError(''); setLoading(true);
@@ -89,21 +103,20 @@ export default function MusicPlayer() {
     void player.play().catch(err => {
       if (wantsPlay.current && err.name !== 'AbortError') { wantsPlay.current = false; setLoading(false); setError('播放未成功，点击重试'); }
     });
-  };
+  }, [track]);
   const toggle = () => {
     if (wantsPlay.current || playing) { wantsPlay.current = false; audio.current?.pause(); setLoading(false); }
     else start();
   };
-  const choose = (next: number) => {
+  const choose = useCallback((next: number) => {
     if (next === index) { if (audio.current) audio.current.currentTime = 0; start(); }
     else { wantsPlay.current = true; setIndex(next); }
-  };
+  }, [index,start]);
   const next = () => {
     const step = mode === 'shuffle' && tracks.length > 1 ? 1 + Math.floor(Math.random() * (tracks.length - 1)) : 1;
     choose((index + step) % tracks.length);
   };
   const close = () => { dialog.current?.close(); setExpanded(false); expandButton.current?.focus(); };
-  const filtered = tracks.filter(item => `${item.title} ${item.originalTitle} ${item.artist}`.toLowerCase().includes(query.toLowerCase()));
   const playbackIcon = loading ? <Loader2 className="music-spinner" size={22}/> : playing ? <Pause size={22} fill="currentColor"/> : <Play size={22} fill="currentColor"/>;
   const modeIcon = mode === 'single' ? <Repeat1 size={19}/> : mode === 'shuffle' ? <Shuffle size={19}/> : <Repeat size={19}/>;
 
@@ -145,10 +158,7 @@ export default function MusicPlayer() {
             <div className="music-volume"><button className="music-icon" aria-label={muted?'取消静音':'静音'} onClick={() => setMuted(!muted)}>{muted || volume===0 ? <VolumeX size={18}/> : <Volume2 size={18}/>}</button><input type="range" min={0} max={1} step={.01} value={muted?0:volume} aria-label="音乐音量" onChange={event => {setVolume(Number(event.target.value));setMuted(false)}}/><span>{Math.round((muted?0:volume)*100)}%</span></div>
             <p className="music-status" role="status">{error || (loading ? '首次播放正在准备资源，请稍候…' : catalogError ? '曲库暂时无法载入' : '')}{catalogError&&<button onClick={()=>setRetry(retry+1)}>重试</button>}</p>
           </section>
-          <section className="music-library" aria-label="音乐曲库"><div className="music-library-heading"><h3><ListMusic size={18}/>曲目列表</h3><span>{tracks.length} 首</span></div><label className="music-search"><Search size={16}/><input aria-label="搜索音乐" value={query} placeholder="搜索歌曲或演唱者" onChange={event=>setQuery(event.target.value)}/></label>
-            <div className="music-queue">{filtered.map(item=><button key={item.id} className={`music-queue-item ${track?.id===item.id?'is-current':''}`} aria-label={`播放 ${item.title} · ${item.artist}`} aria-pressed={track?.id===item.id} onClick={()=>choose(tracks.indexOf(item))}><img src={item.cover} alt="" loading="lazy"/><span><strong>{item.title}</strong><small>{item.artist}</small></span>{track?.id===item.id?<span className="music-queue-dot"/>:<Play size={14}/>}</button>)}{!filtered.length&&<p className="music-no-results">{tracks.length?'没有找到这首歌':'曲库正在准备中'}</p>}</div>
-            <div className="music-library-note"><Disc3 size={15}/><span>IDOLY PRIDE · GAME SOUNDTRACK</span></div>
-          </section>
+          <MusicLibrary tracks={tracks} currentId={track?.id} query={query} onQueryChange={setQuery} onChoose={choose}/>
         </div>
       </div>}
     </dialog>

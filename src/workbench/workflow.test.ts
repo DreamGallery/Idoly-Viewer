@@ -1,5 +1,5 @@
 import { completionStats } from './completion-stats';
-import { docFromIssue, setAssigneeUsers } from './upstream/workflow';
+import { docFromIssue } from './upstream/workflow';
 import { csvText, editorText, lineLengths, longLines, insertFormat } from './text-format';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,20 +22,23 @@ test('editor line breaks serialize as literal backslash-n without changing sourc
 test('length limit excludes formatting and ruby annotations, counts punctuation and Unicode',()=>{assert.deepEqual(lineLengths('<em\\=>文字</em>『<r\\=Prima Stella>启明星</r>』\\n你好！'),[7,3]);assert.equal(longLines([{text:'原\\n文',trans:'字'.repeat(21)}]).length,0);assert.deepEqual(longLines([{text:'原\\n文',trans:'字'.repeat(22)+'\\n短句'}]),[{row:1,line:1,length:22}]);assert.deepEqual(lineLengths('😀'),[1]);});
 test('format wraps selected text and returns editable selection',()=>{const em=insertFormat('前文字后',1,3,'em');assert.equal(em.text,'前<em\\=>文字</em>后');assert.equal(em.text.slice(em.start,em.end),'文字');assert.equal(insertFormat('启明星',0,3,'ruby','Prima Stella').text,'<r\\=Prima Stella>启明星</r>');assert.equal(insertFormat('',0,0,'em').text,'<em\\=>文字</em>');assert.throws(()=>insertFormat('',0,0,'ruby','a>b'));});
 
-test('completion stats merge aliases, ignore unfinished tracks and deduplicate chapters',()=>{setAssigneeUsers({alice:{github:'AliceGH',qq:'123'}});const make=(number:number,title:string,tr:string,pr:string)=>docFromIssue({number,title,updated_at:'2026-01-01',body:`<!-- tr:${tr} -->\n<!-- pr:${pr} -->`});const a=make(1,'story1','qq-123:完成','AliceGH:完成');const stats=completionStats([a,a,make(2,'story2','alice:完成','bob:进行中'),make(3,'story3',':完成','bob:完成')]);assert.deepEqual(stats.find(s=>s.id==='alicegh'),{id:'alicegh',name:'alice',translation:2,proofread:1,total:3,chapters:2});assert.equal(stats.find(s=>s.id==='bob')?.total,1);assert.equal(stats.length,2);setAssigneeUsers({});});
-
-// Personal display IDs must not replace the authentication identity written to tasks.
-import { displayWorkUser, findWorkUser, sameWorkUser, canonicalOperator } from './upstream/workflow';
-test('user directory resolves personal ID, GitHub case and QQ aliases',()=>{
- setAssigneeUsers({'病毒':{github:'kitsurato',qq:'12345'},'QQ成员':{github:'',qq:'67890'}});
- for(const value of ['病毒','kitsurato','KITSURATO','qq-12345','12345'])assert.equal(displayWorkUser(value),'病毒');
- assert.equal(displayWorkUser('qq-67890'),'QQ成员');assert.equal(displayWorkUser(''), '');assert.equal(findWorkUser(''),undefined);
- assert.equal(displayWorkUser('unknown'),'unknown');assert.ok(sameWorkUser('qq-12345','kitsurato'));assert.equal(canonicalOperator('病毒'),'kitsurato');
- const task=docFromIssue({number:1,title:'test',body:'<!-- tr:qq-12345:完成 -->\n<!-- pr:kitsurato:完成 -->'});assert.equal(completionStats([task])[0].total,2);assert.equal(completionStats([task])[0].name,'病毒');
- setAssigneeUsers({a:{github:'duplicate'},b:{github:'DUPLICATE'}});assert.equal(findWorkUser('duplicate'),undefined);setAssigneeUsers({});
+test('completion stats merge GitHub case, ignore unfinished tracks and deduplicate chapters',()=>{
+ const make=(number:number,title:string,tr:string,pr:string)=>docFromIssue({number,title,updated_at:'2026-01-01',body:`<!-- tr:${tr} -->\n<!-- pr:${pr} -->`});
+ const a=make(1,'story1','AliceGH:完成','alicegh:完成');
+ const stats=completionStats([a,a,make(2,'story2','ALICEGH:完成','bob:进行中'),make(3,'story3',':完成','bob:完成')]);
+ assert.deepEqual(stats.find(s=>s.id==='alicegh'),{id:'alicegh',name:'AliceGH',translation:2,proofread:1,total:3,chapters:2});
+ assert.equal(stats.find(s=>s.id==='bob')?.total,1);assert.equal(stats.length,2);
 });
 
-import { buildChineseTxt } from './upstream/workflow';
+import { sameWorkUser, assigneesOf, buildChineseTxt } from './upstream/workflow';
+test('task ownership uses GitHub login and deduplicates the same account across roles',()=>{
+ assert.ok(sameWorkUser(' AliceGH ','alicegh'));
+ assert.equal(sameWorkUser('昵称','AliceGH'),false);
+ assert.equal(sameWorkUser('',''),false);
+ assert.deepEqual(assigneesOf({user:'AliceGH',state:'进行中'},{user:'ALICEGH',state:'待认领'}),['AliceGH']);
+ assert.deepEqual(assigneesOf({user:'',state:'待认领'},{user:' Bob ',state:'进行中'}),['Bob']);
+});
+
 test('proofread TXT uses occurrence matching and preserves name dictionary behavior',()=>{
  const raw='[message text=同文 name=A]\n[message text=同文 name=A]';
  const rows=[{id:'1:text:1',name:'A',text:'同文',trans:'第一句'},{id:'2:text:1',name:'A',text:'同文',trans:'第二句'}];
@@ -63,12 +66,16 @@ test('batch claim preserves the other workflow track',async()=>{
 });
 
 import { completionTranslator } from './upstream/workflow';
-test('translation completion signs with the users.json display ID',async()=>{
- const w=fake({translation:{revision:0}}), read=w.getContent;
- w.getContent=async(a,b,c,path)=>path==='users.json'?{content:b64(JSON.stringify({'个人名字':{github:'Me'}}))}:read(a,b,c,path);
- await completeStage(w,{fileId:'test',role:'tr',sourcePath:'',contentB64:b64(csv),operatorGithub:'me',baseRevision:0});
- const file=w.written.find(f=>f.path==='story/human/test.csv')!;
- assert.equal(extractInfoFromCsvText(Buffer.from(file.content!,'base64').toString()).translator,'翻译：个人名字');
+test('completion signs with GitHub login without querying a user directory',async()=>{
+ const w=fake({translation:{revision:0}}), read=w.getContent, paths:string[]=[];
+ w.getContent=async(a,b,c,path)=>{paths.push(path);return read(a,b,c,path);};
+ await completeStage(w,{fileId:'test',role:'tr',sourcePath:'',contentB64:b64(csv),operatorGithub:'Me',baseRevision:0});
+ const formal=w.written.find(f=>f.path==='story/human/test.csv')!;
+ assert.equal(extractInfoFromCsvText(Buffer.from(formal.content!,'base64').toString()).translator,'翻译：Me');
+ assert.deepEqual(paths,['records/test.json','story/human/test.csv']);
+ const record=JSON.parse(Buffer.from(w.written.find(f=>f.path==='records/test.json')!.content!,'base64').toString());
+ assert.equal(record.translation.operator_github,'Me');assert.equal(record.translation.display_id,'Me');
+ assert.equal(Object.prototype.hasOwnProperty.call(record.translation,'operator_qq'),false);
 });
 test('proofreading preserves formal translator over imported attribution and records',async()=>{
  const w={getContent:async()=>({content:b64(setCsvTranslator(csv,'原译者'))})};
@@ -98,17 +105,17 @@ test('proofread completion credits translator and reviewer in the existing row',
  const validCsv=`id,name,text,trans\n1:text:1,A,one,一句\ninfo,adv_test.txt,${hash},\n译者,old,,\n`;
  t.mock.method(globalThis,'fetch',async(url: RequestInfo | URL)=>Response.json(String(url).includes('/api/script/')?{txt:raw}:{names:{A:'甲'}}));
  const w=fake({translation:{revision:1,state:'完成',display_id:'原译者'},proofread:{revision:0}}),read=w.getContent;
- w.getContent=async(a,b,c,path)=>path==='users.json'?{content:b64(JSON.stringify({'校对名字':{github:'reviewer'}}))}:path==='story/human/test.csv'?{content:b64(setCsvTranslator(validCsv,'翻译：原译者'))}:read(a,b,c,path);
+ w.getContent=async(a,b,c,path)=>path==='story/human/test.csv'?{content:b64(setCsvTranslator(validCsv,'翻译：原译者'))}:read(a,b,c,path);
  await completeStage(w,{fileId:'test',role:'pr',sourcePath:'',contentB64:b64(validCsv),operatorGithub:'reviewer',baseRevision:0});
  const output=extractInfoFromCsvText(Buffer.from(w.written.find(f=>f.path==='story/reviewed/test.csv')!.content!,'base64').toString());
- assert.equal(output.translator,'翻译：原译者；校对：校对名字');assert.equal(output.records.some(r=>r.id==='校对'),false);
+ assert.equal(output.translator,'翻译：原译者；校对：reviewer');assert.equal(output.records.some(r=>r.id==='校对'),false);
  const record=JSON.parse(Buffer.from(w.written.find(f=>f.path==='records/test.json')!.content!,'base64').toString());
- assert.equal(record.translation.display_id,'原译者');assert.equal(record.proofread.display_id,'校对名字');
+ assert.equal(record.translation.display_id,'原译者');assert.equal(record.proofread.display_id,'reviewer');
  const again=fake(record),readAgain=again.getContent;
- again.getContent=async(a,b,c,path)=>path==='users.json'?{content:b64(JSON.stringify({'新校对':{github:'second'}}))}:path==='story/human/test.csv'?{content:b64(setCsvTranslator(validCsv,'翻译：原译者'))}:path==='story/reviewed/test.csv'?{content:b64(toCsvText(output))}:readAgain(a,b,c,path);
+ again.getContent=async(a,b,c,path)=>path==='story/human/test.csv'?{content:b64(setCsvTranslator(validCsv,'翻译：原译者'))}:path==='story/reviewed/test.csv'?{content:b64(toCsvText(output))}:readAgain(a,b,c,path);
  await completeStage(again,{fileId:'test',role:'pr',sourcePath:'',contentB64:b64(toCsvText(output)),operatorGithub:'second',baseRevision:record.proofread.revision});
  const repeated=extractInfoFromCsvText(Buffer.from(again.written.find(f=>f.path==='story/reviewed/test.csv')!.content!,'base64').toString());
- assert.equal(repeated.translator,'翻译：原译者；校对：新校对');
+ assert.equal(repeated.translator,'翻译：原译者；校对：second');
  assert.equal(repeated.records.filter(r=>r.id==='译者').length,1);
  assert.equal(repeated.records[repeated.records.length-1]?.id,'译者');
 });

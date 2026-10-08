@@ -14,6 +14,7 @@ from .build import save
 from .octo_source import decrypt_bundle
 from .publish import digest, Progress
 from .downloads import download_file
+from .unity import load_bundle
 
 RECIPE=1
 
@@ -51,16 +52,14 @@ def stretch_size(name):
 
 
 def process_item(manifest,kind,item,cache,dest,on_download=None):
-    import UnityPy
     from PIL import Image
-    UnityPy.config.FALLBACK_UNITY_VERSION=os.environ.get('IDOLY_UNITY_VERSION','2022.3.57f1')
     name=safe_name(item['name'])
     raw=download_raw(manifest,kind,item,cache,on_download=on_download)
     target=dest/('assetbundle' if kind=='assetBundleList' else 'resource')/name
     target.parent.mkdir(parents=True,exist_ok=True)
     if kind=='resourceList': shutil.copyfile(raw,target); return
     decoded=decrypt_bundle(raw.read_bytes(),name);target.write_bytes(decoded)
-    env=UnityPy.load(decoded)
+    env=load_bundle(decoded)
     for obj in env.objects:
         if obj.type.name!='Texture2D': continue
         texture=obj.read();texture_name=safe_name(texture.m_Name)

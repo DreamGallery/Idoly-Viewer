@@ -8,7 +8,7 @@ test('local collaboration persists commits, denies CSRF, rejects stale baselines
  let cookie='',csrf='';const post=(route,body,overrides={})=>fetch(base+'/api/'+route,{method:'POST',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/json','X-CSRF-Token':csrf,...overrides},body:JSON.stringify(body)});
  assert.equal((await post('auth/local',{login:'tester'},{Origin:'https://evil.test'})).status,403);
  let r=await post('auth/local',{login:'tester'});assert.equal(r.status,200);cookie=r.headers.get('set-cookie').split(';')[0];const auth=await(await fetch(base+'/api/auth/status',{headers:{Cookie:cookie}})).json();csrf=auth.csrf;assert.equal(auth.local,true);assert.equal(auth.canCollaborate,true);
- const source=await(await fetch(base+'/api/source/'+id)).json();const input={message:'本地测试',files:[{path,content:Buffer.from(source.csv).toString('base64'),expectedSha:null}]};
+ const source=await(await fetch(base+'/api/source/'+id,{headers:{Cookie:cookie}})).json();const input={message:'本地测试',files:[{path,content:Buffer.from(source.csv).toString('base64'),expectedSha:null}]};
  assert.equal((await post('github/commit',input,{'X-CSRF-Token':''})).status,403);
  r=await post('github/commit',input);assert.equal(r.status,200,await r.clone().text());const commit=await r.json();assert.ok(commit.sha);
  assert.equal((await post('github/commit',input)).status,409);

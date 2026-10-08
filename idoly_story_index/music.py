@@ -7,13 +7,13 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-import warnings
 
 from .build import ROOT, WORK, load, save
 from .downloads import download_file
 from .octo_source import decrypt_bundle
 from .music_index import music_index
 from .textures import select_texture as select_cover
+from .unity import load_bundle
 
 
 def build_catalog(root=ROOT):
@@ -49,10 +49,7 @@ def materialize(kind, track_id, root=ROOT):
     raw = bundle.read_bytes()
     if len(raw) != item['size'] or hashlib.md5(raw).hexdigest() != item['md5']:
         raise ValueError('Music resource checksum mismatch')
-    import UnityPy
-    UnityPy.config.FALLBACK_UNITY_VERSION = os.environ.get('IDOLY_UNITY_VERSION', '2022.3.57f1')
-    warnings.filterwarnings('ignore', module='UnityPy')
-    env = UnityPy.load(decrypt_bundle(raw, name))
+    env = load_bundle(decrypt_bundle(raw, name))
     if kind == 'cover':
         resource = select_cover(env, name)
     else:

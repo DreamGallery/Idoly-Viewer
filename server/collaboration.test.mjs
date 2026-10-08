@@ -15,6 +15,7 @@ test('collaboration originals and CSV use pinned independent commits, never publ
  const sources=collaborationSources({read:async(_s,path,head)=>{reads.push([path,head]);return path.endsWith('.json')?JSON.stringify(manifest):csv},remoteFetch:async url=>{assert.equal(url,`https://raw.githubusercontent.com/DreamGallery/Hoshimi-Adv/${sourceCommit}/Resource/adv_test.txt`);return new Response(raw)}});
  const result=await sources.source({},'frozen-work','adv_test');
  assert.equal(result.path,'card/adv_test.csv');assert.equal(result.sourceHash,sha);
+ assert.ok(!result.csv.includes('译文'));assert.ok(result.csv.includes('原文'));
  assert.ok(reads.every(([,head])=>head==='frozen-work'));
 });
 test('missing manifest, mismatched originals and unsafe source repositories fail closed',async()=>{
@@ -62,7 +63,7 @@ test('Worker serves collaboration source before R2 publication and requires acce
  const f=await fixture(t);
  assert.equal((await fetch(f.base+'/api/collaboration/source/adv_test')).status,401);
  const response=await fetch(f.base+'/api/collaboration/source/adv_test',{headers:f.headers});
- assert.equal(response.status,200);assert.equal((await response.json()).sourceHash,sha);
+ assert.equal(response.status,200);const source=await response.json();assert.equal(source.sourceHash,sha);assert.ok(!source.csv.includes('译文'));
 });
 test('autosave retries an unrelated branch advance but never writes main',async t=>{
  const f=await fixture(t,{race:true});const response=await f.submit(csv);

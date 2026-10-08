@@ -11,7 +11,7 @@ import zipfile
 
 from idoly_story_index.game_archive import portable_member, prepare_archives, snapshot, stretch_size, write_archive
 from idoly_story_index.master_source import TABLES, artifact_tables, unpack_table
-from idoly_story_index.publish import publish, snapshot_plan, upload_batch
+from idoly_story_index.publish import inventory_for, publish, snapshot_plan, upload_batch
 from idoly_story_index.octo_source import decrypt_bundle
 
 
@@ -81,6 +81,22 @@ class ArchiveTests(unittest.TestCase):
 
 
 class PublicationTests(unittest.TestCase):
+    def test_inventory_retains_only_requested_objects_across_pages(self):
+        class S3:
+            def get_paginator(self,operation):
+                self.operation=operation;return self
+            def paginate(self,**kwargs):
+                self.prefix=kwargs['Prefix']
+                return [{'Contents':[{'Key':'prefix/media/old/old.flac','Size':9},
+                                     {'Key':'prefix/media/new/one.flac','Size':3}]},
+                        {'Contents':[{'Key':'prefix/media/new/two.flac','Size':4}]}]
+            def head_object(self,**kwargs):raise AssertionError('Per-file HEAD forbidden')
+        s3=S3()
+        result=inventory_for(s3,'bucket','prefix',{'media/new/one.flac':None,'media/new/two.flac':None})
+        self.assertEqual(result,{'media/new/one.flac':3,'media/new/two.flac':4})
+        self.assertEqual(s3.operation,'list_objects_v2')
+        self.assertEqual(s3.prefix,'prefix/media/')
+
     def test_upload_checks_use_bulk_listings_without_head_requests(self):
         class S3:
             def __init__(self):self.objects={};self.listings=0;self.uploads=0

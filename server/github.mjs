@@ -10,7 +10,6 @@ export async function createSourceServices(env) {
  const web=env.CAMPUS_WEB_DATA||resolve(root,'public');
  const catalog=JSON.parse(await readFile(resolve(web,'data/catalog.json'),'utf8'));
  const byId=new Map(catalog.stories.map(story=>[story.id,story]));
- const ai=env.CAMPUS_STORY_ROOT||resolve(root,'../Idoly-localify-translations/story/ai');
  const original=env.IDOLY_CSV_ROOT||resolve(root,'../Hoshimi-Adv/CSV');
  async function readWithin(directory,path) {
   const base=await realpath(directory),file=await realpath(resolve(base,path));
@@ -22,10 +21,6 @@ export async function createSourceServices(env) {
   sourceCsv:async id=>{
    const story=byId.get(id);
    if(!story)throw Object.assign(Error('剧情不存在'),{status:404});
-   for(const [directory,label] of [[resolve(ai,'../reviewed'),'人工校对稿'],[resolve(ai,'../human'),'人工翻译稿'],[ai,'AI 初译 · 待翻译']]){
-    try{return {csv:await readWithin(directory,story.path),label}}
-    catch(error){if(error.code!=='ENOENT')throw error}
-   }
    return {csv:await readWithin(original,story.path),label:'原文'};
   },
  };

@@ -1,0 +1,9 @@
+[
+  {
+    "AllowedOrigins": ["https://viewer.example.com", "http://127.0.0.1:5173"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["Range", "If-Range", "If-None-Match"],
+    "ExposeHeaders": ["ETag", "Content-Length", "Content-Range", "Accept-Ranges"],
+    "MaxAgeSeconds": 3600
+  }
+]

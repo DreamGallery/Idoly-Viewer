@@ -9,8 +9,27 @@ from pathlib import Path
 import re
 import threading
 import time
+from urllib.parse import quote, urlsplit
 
 from .build import save
+from .public_text import original_csv, original_story
+from .r2_inventory import inventory_for, verification_prefixes
+
+
+def public_media_base(value):
+    value = value.strip().rstrip('/')
+    if not value:
+        return ''
+    try:
+        url = urlsplit(value)
+        valid = (url.scheme == 'https' and url.hostname and url.username is None and url.password is None
+                 and value == 'https://' + url.netloc)
+        url.port  # Reject malformed ports before syncing or uploading anything.
+    except ValueError:
+        valid = False
+    if not valid or any(c.isspace() or ord(c) < 32 for c in value) or '\\' in value:
+        raise ValueError('IDOLY_R2_PUBLIC_BASE_URL must be an HTTPS origin without a path, credentials, query or fragment')
+    return value
 
 
 def digest(path):
@@ -86,9 +105,18 @@ class Progress:
         self.stop.set(); self.thread.join(); self.log()
 
 
-def snapshot_plan(stage):
+def snapshot_plan(stage, *, public_base='', prefix='idoly-v1'):
+    public_base = public_media_base(public_base)
+    if not re.fullmatch(r'[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*', prefix):
+        raise ValueError('Invalid public resource prefix')
     files, jobs = {}, {}
+    paths, media_urls = [], {}
     scanned=0;last_log=time.monotonic()
+    def progress():
+        nonlocal scanned, last_log
+        scanned+=1
+        if time.monotonic()-last_log>=10:
+            print(f'R2: prepared {scanned} snapshot files',flush=True);last_log=time.monotonic()
     for folder in ('web','story','adv','media'):
         for path in sorted((stage/folder).rglob('*')):
             if path.is_symlink():
@@ -97,46 +125,69 @@ def snapshot_plan(stage):
             relative = path.relative_to(stage).as_posix()
             if '\\' in relative or any(ord(c)<32 for c in relative):
                 raise ValueError('Invalid snapshot filename')
-            sha = digest(path)
-            scanned+=1
-            if time.monotonic()-last_log>=10:
-                print(f'R2: hashed {scanned} snapshot files',flush=True);last_log=time.monotonic()
             category = 'media' if folder=='media' or relative.startswith('web/images/') else 'text'
+            paths.append((path, relative, category))
+    # Media hashes do not depend on the index. Resolve them before serializing
+    # JSON, so direct URLs and their enclosing text hashes stay immutable.
+    for path, relative, category in paths:
+        if category == 'media':
+            sha = digest(path)
             key = f'{category}/{sha}/{path.name}'
             files[relative] = key
             jobs[key] = (path,sha)
+            logical_url = '/' + relative.removeprefix('web/') if relative.startswith('web/') else '/api/' + relative
+            media_urls[logical_url] = (public_base + '/' + prefix if public_base else '') + '/' + quote(key, safe='/')
+            progress()
+
+    def rewrite(value):
+        if isinstance(value, list):
+            return [rewrite(item) for item in value]
+        if isinstance(value, dict):
+            return {key: rewrite(item) for key, item in value.items()}
+        return media_urls.get(value, value) if isinstance(value, str) else value
+
+    for path, relative, category in paths:
+        if category == 'media':
+            continue
+        body = None
+        if relative.startswith('story/'):
+            if path.suffix != '.csv':
+                raise ValueError('Only original CSV belongs in the public story directory')
+            body = original_csv(path.read_bytes().decode('utf-8-sig')).encode()
+        elif relative.startswith('web/') and path.suffix == '.json':
+            value = json.loads(path.read_bytes())
+            if relative.startswith('web/data/stories/'):
+                value = original_story(value)
+            if relative.startswith('web/catalog/') and '/chapters/' in relative:
+                value['label'] = '原文'
+            body = json.dumps(rewrite(value), ensure_ascii=False, separators=(',', ':')).encode()
+        if body is not None:
+            # Never rewrite an input file: snapshots may share hard links with
+            # the extraction cache or a retained release.
+            path = stage/'public-export'/relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(body)
+        sha = hashlib.sha256(body).hexdigest() if body is not None else digest(path)
+        key = f'text/{sha}/{path.name}'
+        files[relative] = key
+        jobs[key] = (path, sha)
+        progress()
     # More than 100k voice clips: a flat map can exhaust a small Worker isolate.
     shards={}
     for logical,key in files.items():
         shard=hashlib.sha256(logical.encode()).hexdigest()[:2]
         shards.setdefault(shard,{})[logical]=key
     for shard,entries in shards.items():save(stage/'maps'/(shard+'.json'),{'files':entries})
-    save(stage/'file-map.json', {'schema_version':1,'files':{},'shards':{
+    save(stage/'file-map.json', {'schema_version':1,'text_policy':'original-only','files':{},'shards':{
         shard:f'releases/{stage.name}/maps/{shard}.json' for shard in sorted(shards)}})
     return files,jobs
-
-
-def inventory_for(s3,bucket,prefix,jobs):
-    roots=set()
-    for key in jobs:
-        parts=key.split('/')
-        roots.add('/'.join(parts[:2]) if parts[0]=='releases' else parts[0])
-    inventory={}
-    for folder in sorted(roots):
-        print('R2: batch listing '+folder,flush=True)
-        count=0
-        for page in s3.get_paginator('list_objects_v2').paginate(Bucket=bucket,Prefix=prefix+'/'+folder+'/'):
-            for item in page.get('Contents',[]):inventory[item['Key'][len(prefix)+1:]]=item['Size']
-            count+=len(page.get('Contents',[]))
-            if count and count%10000==0:print(f'R2: scanned {count} {folder} objects',flush=True)
-    return inventory
 
 
 def upload_batch(s3,bucket,prefix,jobs,label,workers=4,inventory=None):
     # Only ListObjectsV2 pagination; never one HEAD request per file. Hash keys
     # are immutable and owned by this publisher; size detects truncated objects.
     if not jobs:return
-    existing=inventory if inventory is not None else inventory_for(s3,bucket,prefix,jobs)
+    existing=inventory if inventory is not None else inventory_for(s3,bucket,prefix,jobs,workers=workers)
     uploaded=[]
     with Progress(label,len(jobs)) as progress:
         def upload(job):
@@ -159,23 +210,20 @@ def upload_batch(s3,bucket,prefix,jobs,label,workers=4,inventory=None):
             except Exception:progress.finish('failed');raise
         with ThreadPoolExecutor(max_workers=workers) as pool:list(pool.map(upload,jobs.items()))
     if uploaded:
-        print('R2: batch verification after upload',flush=True)
-        checked=inventory_for(s3,bucket,prefix,{key:jobs[key] for key in uploaded})
+        pending={key:jobs[key] for key in uploaded}
+        checked=inventory_for(s3,bucket,prefix,pending,workers=workers,
+            prefixes=verification_prefixes(pending,existing),phase='verification')
         for key in uploaded:
             if checked.get(key)!=jobs[key][0].stat().st_size:raise ValueError('R2 upload size verification failed: '+key)
 
 
-def publish(s3,bucket,prefix,stage,versions,expected_etag,download_root,workers=4):
+def publish(s3,bucket,prefix,stage,versions,expected_etag,download_root,workers=4,*,public_base=''):
     release=stage.name
     if not re.fullmatch('[A-Za-z0-9_-]+',release): raise ValueError('Invalid release ID')
     print('R2: hashing local snapshot before upload',flush=True)
-    _,jobs=snapshot_plan(stage)
-    inventory={}
-    for folder in ('media','text'):
-        print('R2: listing existing '+folder+' objects',flush=True)
-        for page in s3.get_paginator('list_objects_v2').paginate(Bucket=bucket,Prefix=prefix+'/'+folder+'/'):
-            for item in page.get('Contents',[]):inventory[item['Key'][len(prefix)+1:]]=item['Size']
-    upload_batch(s3,bucket,prefix,jobs,'R2: resources and text',workers,inventory)
+    _,jobs=snapshot_plan(stage,public_base=public_base,prefix=prefix)
+    print('R2: original-only text; media '+('uses the configured public origin' if public_base else 'uses same-origin content hashes'),flush=True)
+    upload_batch(s3,bucket,prefix,jobs,'R2: resources and text',workers)
     archives={}
     for item in versions['versions']:
         name=item['filename']
@@ -188,7 +236,7 @@ def publish(s3,bucket,prefix,stage,versions,expected_etag,download_root,workers=
     upload_batch(s3,bucket,prefix,maps,'R2: map shards',workers)
     mapping=stage/'file-map.json'
     upload_batch(s3,bucket,prefix,{f'releases/{release}/file-map.json':(mapping,digest(mapping))},'R2: release map',1)
-    pointer={'schema_version':1,'release':release,'published_at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'versions':versions}
+    pointer={'schema_version':1,'text_policy':'original-only','release':release,'published_at':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'versions':versions}
     # Compare-and-swap also protects first publication against another updater.
     condition={'IfMatch':expected_etag} if expected_etag else {'IfNoneMatch':'*'}
     print('R2: all objects verified; switching current.json',flush=True)

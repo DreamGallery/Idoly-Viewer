@@ -5,13 +5,13 @@ import os
 from pathlib import Path
 import re
 import sys
-import warnings
 
 from .build import ROOT, WORK, load
 from .downloads import download_file
 from .audio import encode_flac, encode_audio
 from .voice_encoding import VoiceEncoding, encoding_for_bank
 from .textures import select_texture
+from .unity import load_bundle
 
 
 def select_voice_clips(clips, names):
@@ -69,11 +69,8 @@ def materialize(kind, name, root=ROOT, *, plan=None, cache_root=None, voice_name
         return target
     if not bundle.exists():atomic(bundle,raw)
     from .octo_source import decrypt_bundle
-    import UnityPy
-    UnityPy.config.FALLBACK_UNITY_VERSION=os.environ.get('IDOLY_UNITY_VERSION','2022.3.57f1')
-    warnings.filterwarnings('ignore',module='UnityPy')
     decoded=decrypt_bundle(raw,bank)
-    env=UnityPy.load(decoded)
+    env=load_bundle(decoded)
     if kind=='image':
         picture=select_texture(env,name).image
         picture.thumbnail((1600,1600))

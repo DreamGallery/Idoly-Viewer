@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Users } from 'lucide-react';
 import { attributeOptions, roleOptions, defaultCardFilters, type CardFilters } from './card-filters';
 import type { Catalog } from './idoly-types';
@@ -10,8 +11,10 @@ export default function CharacterFilter({ data, directory, group, character, onG
  cardFilters: CardFilters; onCardFiltersChange: (filters: CardFilters) => void;
  onGroupChange: (id: string) => void; onCharacterChange: (id: string) => void;
 }) {
- const indexedCards = new Set(data.stories.filter(story=>story.category==='card'&&story.masterId).map(story=>directory?.stories[story.id]?.group));
- const available = data.characters.filter(c => directory?.nodes['card:'+c.id]?.children.some(id=>indexedCards.has(id)));
+ const available = useMemo(() => {
+  const indexedCards = new Set(data.stories.filter(story=>story.category==='card'&&story.masterId).map(story=>directory?.stories[story.id]?.group));
+  return data.characters.filter(c => directory?.nodes['card:'+c.id]?.children.some(id=>indexedCards.has(id)));
+ }, [data,directory]);
  const characters = available.filter(c => group === 'all' || c.group === group);
  const active=cardFilters.attribute!=='all'||cardFilters.role!=='all'||cardFilters.spOnly||cardFilters.evolutionOnly;
  return <section className="card-character-filter" aria-label="卡牌剧情角色筛选">

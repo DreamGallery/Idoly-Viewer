@@ -64,13 +64,14 @@ test('actual Workers runtime serves SPA, Node API, R2 text, OAuth state and logo
     const get=(path,init)=>harness.fetch('http://127.0.0.1:8788'+path,init);
     assert.equal((await (await get('/api/health')).json()).ok,true);
     assert.equal((await get('/workbench')).headers.get('Content-Type').includes('text/html'),true);
-    assert.equal((await get('/api/source/adv_demo')).status,503);
     await env.RESOURCES.put('idoly-v1/current.json',JSON.stringify({release:'r1',versions:{revision:62,versions:[]}}));
+    assert.deepEqual(await(await get('/api/resources/status')).json(),{state:'ready',revision:62,release:'r1'});
     await env.RESOURCES.put('idoly-v1/releases/r1/web/catalog/manifest.json',JSON.stringify({base_path:'/catalog/releases/r1/builds/x'}));
     await env.RESOURCES.put('idoly-v1/releases/r1/web/catalog/builds/x/chapters/adv_demo.json',JSON.stringify({csv_path:'CSV/demo.csv'}));
-    await env.RESOURCES.put('idoly-v1/releases/r1/story/CSV/demo.csv','name,text\n咲季,你好');
+    await env.RESOURCES.put('idoly-v1/releases/r1/story/CSV/demo.csv','id,name,text,trans\r\n1:text:1,A,原文,秘密译文\r\ninfo,adv_demo.txt,hash,\r\n译者,秘密署名,,');
     await env.RESOURCES.put('idoly-v1/releases/r1/adv/adv_demo.txt','original script');
-    assert.equal((await (await get('/api/source/adv_demo')).json()).csv,'name,text\n咲季,你好');
+    const original=await get('/api/original/adv_demo');assert.equal(original.status,200);const publicCsv=(await original.json()).csv;assert.ok(publicCsv.includes('原文'));assert.ok(!publicCsv.includes('秘密'));
+    for(const path of ['/api/source/adv_demo','/api/source/adv_demo?release=r1','/api/collaboration/source/adv_demo','/api/script/adv_demo?work=1&release=r1']) assert.equal((await get(path)).status,401);
     assert.equal((await (await get('/api/script/adv_demo')).json()).txt,'original script');
     await env.RESOURCES.put('idoly-v1/releases/r1/web/data/catalog.json','{"stories":[]}');
     assert.deepEqual(await (await get('/data/catalog.json')).json(),{stories:[]});
@@ -81,9 +82,15 @@ test('actual Workers runtime serves SPA, Node API, R2 text, OAuth state and logo
     const audio=await get('/api/media/voice/demo.wav',{headers:{Range:'bytes=3-6'}});
     assert.equal(audio.status,206);assert.equal(audio.headers.get('Content-Type'),'audio/wav');assert.equal(await audio.text(),'3456');
     await env.RESOURCES.put('idoly-v1/current.json',JSON.stringify({release:'r2'}));
-    const pinnedCsv=await (await get('/api/source/adv_demo?release=r1')).json();
-    assert.equal(pinnedCsv.csv,'name,text\n咲季,你好');assert.match(pinnedCsv.sha256,/^[a-f0-9]{64}$/);
+    const pinnedCsv=await (await get('/api/original/adv_demo?release=r1')).json();
+    assert.equal(pinnedCsv.csv,publicCsv);assert.match(pinnedCsv.sha256,/^[a-f0-9]{64}$/);
     assert.equal((await (await get('/api/script/adv_demo?release=r1')).json()).txt,'original script');
+    await env.RESOURCES.put('idoly-v1/releases/r1/web/data/stories/adv_demo.json',JSON.stringify({id:'adv_demo',title:'private title',originalTitle:'原題',script:'original script',rows:[{id:'1:text:1',name:'A',text:'原文',trans:'private',ai:'private',human:'private',reviewed:'private'}],metadata:[{id:'译者',name:'private credit',text:'',trans:''}]}));
+    for(const method of ['GET','HEAD']) {
+      const legacy=await get('/data/stories/adv_demo.json?release=r1',{method});
+      assert.equal(legacy.status,200);const value=await legacy.text();assert.ok(!value.includes('private'));
+      if(method==='GET')assert.equal(JSON.parse(value).rows[0].text,'原文');
+    }
     const login=await get('/api/auth/login?returnTo=/workbench',{redirect:'manual'});
     assert.equal(login.status,302);const location=new URL(login.headers.get('Location'));const state=location.searchParams.get('state');
     const flow=await sessionStore(env.DB,secret,'oauth').get(state);assert.equal(flow.returnTo,'/workbench');
@@ -91,8 +98,36 @@ test('actual Workers runtime serves SPA, Node API, R2 text, OAuth state and logo
     assert.equal((await get(callback,{headers:{Cookie:'campus_oauth='+state}})).status,400);
     assert.equal(await sessionStore(env.DB,secret,'oauth').get(state),undefined);
     const sessions=sessionStore(env.DB,secret,'session');await sessions.set('test-cookie',{token:'fake',csrf:'csrf-test',expires:Date.now()+60000});
-    const logout=await get('/api/auth/logout',{method:'POST',headers:{Origin:'http://127.0.0.1:8788',Cookie:'idoly_session=test-cookie','X-CSRF-Token':'csrf-test'},body:'{}'});
+    const logout=await get('/api/auth/logout',{method:'POST',headers:{Origin:'http://127.0.0.1:8788',Cookie:'idoly_session=test-cookie','X-CSRF-Token':'csrf-test','Content-Type':'application/json'},body:'{}'});
     assert.equal(logout.status,200);assert.equal(await sessions.get('test-cookie'),undefined);
+    const countStates=async()=>Number((await env.DB.prepare("SELECT COUNT(*) AS total FROM auth_state WHERE namespace='oauth'").first()).total);
+    const before=await countStates();let allowed=0,denied=0,activeState;
+    for(let i=0;i<22;i++){
+      const attempt=await get('/api/auth/login?returnTo=/workbench&random='+i,{redirect:'manual',headers:{'CF-Connecting-IP':'192.0.2.10',Cookie:'idoly_session=changed-'+i}});
+      if(attempt.status===302){allowed++;activeState=new URL(attempt.headers.get('Location')).searchParams.get('state');}
+      else{assert.equal(attempt.status,429);assert.equal(attempt.headers.get('Retry-After'),'60');assert.equal(attempt.headers.get('Cache-Control'),'no-store');assert.equal(attempt.headers.has('Set-Cookie'),false);denied++;}
+    }
+    assert.ok(allowed>0);assert.ok(denied>0);assert.equal(await countStates()-before,allowed);
+    const callbackAfterLimit=await get('/api/auth/callback?state='+activeState,{headers:{'CF-Connecting-IP':'192.0.2.10',Cookie:'campus_oauth='+activeState}});
+    assert.equal(callbackAfterLimit.status,400);assert.equal(await sessionStore(env.DB,secret,'oauth').get(activeState),undefined);
+    const otherClient=await get('/api/auth/login',{redirect:'manual',headers:{'CF-Connecting-IP':'192.0.2.11'}});
+    assert.equal(otherClient.status,302,'separate client IP has its own login quota');
+    const media='media/'+'e'.repeat(64)+'/cached.flac';
+    await env.RESOURCES.put('idoly-v1/'+media,'0123456789');
+    assert.equal(await(await get('/'+media)).text(),'0123456789');
+    // Delete only this local test object to distinguish a real cache hit from R2.
+    await env.RESOURCES.delete('idoly-v1/'+media);
+    assert.equal(await(await get('/'+media+'?reload=1')).text(),'0123456789');
+    const cachedRange=await get('/'+media,{headers:{Range:'bytes=2-5'}});
+    assert.equal(cachedRange.status,206);assert.equal(await cachedRange.text(),'2345');
+    const coldMedia='media/'+'f'.repeat(64)+'/cold.flac';
+    await env.RESOURCES.put('idoly-v1/'+coldMedia,'abcdefghij');
+    const firstRange=await get('/'+coldMedia,{headers:{Range:'bytes=2-5'}});
+    assert.equal(firstRange.status,206);assert.equal(await firstRange.text(),'cdef');
+    await env.RESOURCES.delete('idoly-v1/'+coldMedia);
+    assert.equal(await(await get('/'+coldMedia+'?again=1')).text(),'abcdefghij','the first range request caches the complete object');
+    const laterRange=await get('/'+coldMedia,{headers:{Range:'bytes=-3'}});
+    assert.equal(laterRange.status,206);assert.equal(await laterRange.text(),'hij');
   } finally {await harness.close();}
 });
 
@@ -113,6 +148,7 @@ test('content-addressed release maps serve CSV, TXT and catalog; older releases 
   await assert.rejects(()=>data.readFile(roots.story,'CSV/absent.csv'),{status:404});
   await assert.rejects(()=>data.readFile(roots.story,'CSV/bad.csv'),{status:503});
   await bucket.put('mapped/releases/old/story/CSV/demo.csv','legacy');
+  await bucket.put('mapped/releases/old/web/catalog/manifest.json','{"base_path":"/catalog/releases/old"}');
   assert.equal(await data.readFile('releases/old/story','CSV/demo.csv'),'legacy');
   assert.equal(await data.readFile(roots.story,'CSV/legacy.csv'),'legacy');
 }));
@@ -215,7 +251,7 @@ test('oversized root and shard maps are rejected before JSON is read',async()=>{
  assert.equal(texts,0);
  const logical='story/a.csv',tag=createHash('sha256').update(logical).digest('hex').slice(0,2);
  const root=JSON.stringify({schema_version:1,files:{},shards:{[tag]:`releases/r1/maps/${tag}.json`}});
- bucket={get:async key=>key.endsWith('/file-map.json')?{size:root.length,text:async()=>root}:tooLarge(2*1024*1024+1)};
+ bucket={get:async key=>key.endsWith('/file-map.json')?{size:root.length,body:new Response(root).body,httpEtag:'"root"',writeHttpMetadata:()=>{}}:tooLarge(2*1024*1024+1)};
  await assert.rejects(()=>resources({RESOURCES:bucket}).readFile('releases/r1/story','a.csv'),{status:503});assert.equal(texts,0);
 });
 

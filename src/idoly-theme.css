@@ -23,7 +23,6 @@
 [data-theme=dark] .header-theme button:hover{background:#2a3550}
 [data-theme=dark] .header-resource{color:var(--night-muted)}
 [data-theme=dark] .header-resource-panel{background:var(--night-panel);color:var(--foreground)}
-[data-theme=dark] .header-resource-panel button{background:var(--night-raised);color:var(--night-muted)}
 [data-theme=dark] .story-menu{background:#202d59}
 [data-theme=dark] .menu-backdrop{background:#03071199}
 [data-theme=dark] :is(.search,.filter-cycle,.back-link,.card-character-filter,.directory-card-grid>.directory-group,.updates-card,.work-editor,.work-tasks a,.work-page .work-tasks .work-task-option,.card-lightbox){background:var(--night-panel);color:var(--foreground);border-color:var(--border)}

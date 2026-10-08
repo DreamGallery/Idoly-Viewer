@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {validateCsvAgainstScript} from './validate-csv.mjs';
+import {originalCsv} from './public-story.mjs';
 
 const fail = (status, message) => Object.assign(new Error(message), {status});
 const hash = text => createHash('sha256').update(text).digest('hex');
@@ -40,8 +41,9 @@ export function collaborationSources({read, remoteFetch}) {
   }
   async function source(session, head, id) {
     const item = await entry(session, head, id);
-    const [csv, txt] = await Promise.all([read(session, 'story/ai/'+item.csv_path, head), raw(session, head, id)]);
-    validateCsvAgainstScript(csv, txt, {checkLength:false});
+    const [value, txt] = await Promise.all([read(session, 'story/ai/'+item.csv_path, head), raw(session, head, id)]);
+    validateCsvAgainstScript(value, txt, {checkLength:false});
+    const csv = originalCsv(value);
     return {csv, txt, sha256:hash(csv), sourceHash:item.source_sha256, path:item.csv_path, head, label:'协作分支原文'};
   }
   return {entry, raw, source};

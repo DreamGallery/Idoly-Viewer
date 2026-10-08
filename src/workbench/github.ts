@@ -2,7 +2,8 @@ import {resourceUrl} from '../resource-snapshot';
 /* Adapter for the upstream Octokit-style workflow. Tokens stay in the API service. */
 export interface Auth { local?: boolean; canCollaborate: boolean; configured: boolean; user: { login: string; name: string } | null; csrf: string | null; work: { owner: string; repo: string; branch: string } }
 export async function api<T>(path: string, body?: unknown, csrf?: string | null): Promise<T> {
-  const response = await fetch(resourceUrl('/api/' + path), { method: body === undefined ? 'GET' : 'POST', headers: body === undefined ? undefined : { 'Content-Type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const privateRead = path.startsWith('source/') || path.startsWith('collaboration/') || /^script\/.*[?&]work=1(?:&|$)/.test(path);
+  const response = await fetch(resourceUrl('/api/' + path), { cache:privateRead ? 'no-store' : 'default', method: body === undefined ? 'GET' : 'POST', headers: body === undefined ? undefined : { 'Content-Type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
   if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('协作服务未启动，请启动 API 服务');
   const data = await response.json();
   if (!response.ok) throw Object.assign(new Error(data.error || `请求失败 ${response.status}`), { response: { status: response.status } });
@@ -18,13 +19,13 @@ export class Github {
   constructor(public auth: Auth) {}
   async getContent(_owner: string, _repo: string, _branch: string, path: string) {
     try {
-      const file = await api<Content>('github/read', { kind: 'content', path });
+      const file = await api<Content>('github/read', { kind: 'content', path }, this.auth.csrf);
       if (!this.baseline.has(path)) this.baseline.set(path, file.sha);
       return file;
     } catch (e) { if ((e as { response?: { status: number } }).response?.status === 404 && !this.baseline.has(path)) this.baseline.set(path, null); throw e; }
   }
   async getIssue(_owner: string, _repo: string, number: number) {
-    const issue = await api<Issue>('github/read', { kind: 'issue', number });
+    const issue = await api<Issue>('github/read', { kind: 'issue', number }, this.auth.csrf);
     this.issues.set(number, issue); return issue;
   }
   async updateIssue(_owner: string, _repo: string, number: number, data: unknown) {

@@ -1,4 +1,4 @@
-import { DocTask, displayWorkUser, canonicalOperator } from './upstream/workflow';
+import { DocTask } from './upstream/workflow';
 export interface CompletionStat { id: string; name: string; translation: number; proofread: number; chapters: number; total: number }
 export function completionStats(tasks: DocTask[]): CompletionStat[] {
   const people = new Map<string, CompletionStat & { scripts: Set<string> }>();
@@ -6,8 +6,8 @@ export function completionStats(tasks: DocTask[]): CompletionStat[] {
   for (const task of tasks) for (const role of ['tr', 'pr'] as const) {
     const track = task[role];
     if (track.state !== '完成' || !track.user.trim()) continue;
-    const name = displayWorkUser(track.user);
-    const id = canonicalOperator(track.user).toLowerCase();
+    const name = track.user.trim();
+    const id = name.toLowerCase();
     const identity = `${task.title}:${role}:${id}`;
     if (counted.has(identity)) continue;
     counted.add(identity);

@@ -11,7 +11,7 @@
     "dev:api": "node server/local.mjs",
     "test:api": "node --test server/*.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "test:workbench": "esbuild src/workbench/workflow.test.ts src/workbench/export.test.ts --bundle --platform=node --format=esm --define:import.meta.env={} --outdir=.test-build && node --test .test-build/*.js",
+    "test:workbench": "esbuild src/workbench/workflow.test.ts src/workbench/export.test.ts src/workbench/voice-map.test.ts --bundle --platform=node --format=esm --define:import.meta.env={} --outdir=.test-build && node --test .test-build/workflow.test.js .test-build/export.test.js .test-build/voice-map.test.js",
     "dev:cloudflare": "wrangler dev --port 8788",
     "build:cloudflare": "node scripts/build_cloudflare.mjs && wrangler deploy --dry-run",
     "test:cloudflare": "node --test cloudflare/*.test.mjs",
@@ -23,7 +23,8 @@
     "test:card-filters": "esbuild src/card-filters.test.ts --bundle --platform=node --format=esm --outfile=.test-build/card-filters.test.js && node --test .test-build/card-filters.test.js",
     "test:updates": "python3 -m unittest discover -s tests -p test_idoly_text_updates.py -v && esbuild src/text-updates.test.ts --bundle --platform=node --format=esm --outfile=.test-build/text-updates.test.js && node --test .test-build/text-updates.test.js",
     "dev:api:github": "node server/github.mjs",
-    "test:docker": "python3 -m unittest discover -s tests -p test_docker_pipeline.py -v"
+    "test:docker": "python3 -m unittest discover -s tests -p 'test_docker*.py' -v",
+    "test:catalog": "esbuild src/story-search.test.ts --bundle --platform=node --format=esm --outfile=.test-build/story-search.test.js && node --test .test-build/story-search.test.js"
   },
   "dependencies": {
     "@ibm/plex-sans": "^1.1.0",

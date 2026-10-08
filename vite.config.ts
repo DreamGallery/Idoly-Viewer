@@ -2,10 +2,12 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { execFileSync } from 'node:child_process';
 import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 // @ts-expect-error Local Node middleware is implemented in JavaScript.
 import { localMusicHandler } from './server/local-music.mjs';
+// @ts-expect-error Shared source-only response filtering is implemented in JavaScript.
+import { originalStory } from './server/public-story.mjs';
 
 // Serve mounted data directly: Vite's public-file inventory does not reliably
 // discover newly published files inside an external symlink without a restart.
@@ -23,6 +25,22 @@ export default defineConfig(({ mode }) => {
         server.middlewares.use(localMusicHandler(process.cwd(), loadEnv(mode, process.cwd(), 'IDOLY_MUSIC_')));
         server.middlewares.use(async (req, res, next) => {
           const url = req.url || '';
+          let path;
+          try { path = decodeURIComponent(new URL(url,'http://localhost').pathname); }
+          catch { res.statusCode=400;res.end();return; }
+          if(path.startsWith('/data/stories/')) {
+            if(!['GET','HEAD'].includes(req.method || '')) {res.statusCode=405;res.end();return;}
+            if(!/^\/data\/stories\/[\w-]+\.json$/.test(path)) {res.statusCode=404;res.end();return;}
+            try {
+              const root=await realpath(resolve(env.CAMPUS_WEB_DATA || 'public','data/stories'));
+              const file=await realpath(resolve(root,path.slice('/data/stories/'.length)));
+              if(!file.startsWith(root+sep)) {res.statusCode=403;res.end();return;}
+              const body=JSON.stringify(originalStory(JSON.parse(await readFile(file,'utf8'))));
+              res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');
+              res.end(req.method==='HEAD'?undefined:body);
+            } catch {res.statusCode=404;res.end();}
+            return;
+          }
           const folder = url.startsWith('/audio/') ? 'audio' : url.startsWith('/catalog/') ? 'catalog' : url.startsWith('/assets/images/') ? 'assets' : null;
           if (!folder) return next();
           if (req.method !== 'GET' && req.method !== 'HEAD') { res.statusCode = 405; res.end(); return; }

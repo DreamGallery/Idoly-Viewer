@@ -8,15 +8,26 @@ export default function ResourceVersions({ revision }: { revision?: string | num
   const [error, setError] = useState(false);
   const [open, setOpen] = useState(false);
   useEffect(() => {
+    if (!open) return;
     const controller = new AbortController();
     fetch('/api/resources/versions', { signal: controller.signal }).then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(value => { setData(value); setError(false); }).catch(e => { if (e.name !== 'AbortError') setError(true); });
     return () => controller.abort();
   }, [open]);
   return <details className="header-resource" onToggle={e => setOpen(e.currentTarget.open)} onKeyDown={e => { if (e.key === 'Escape') { e.currentTarget.open = false; e.currentTarget.querySelector('summary')?.focus(); } }}>
     <summary aria-label="资源版本与下载">资源版本 {data?.revision ?? revision ?? '—'}<ChevronDown size={12} aria-hidden="true" /></summary>
-    <div className="header-resource-panel resource-version-menu"><strong>最新五个增量资源包</strong>
-      {data?.versions.slice(0,5).map(v => <a key={v.filename} href={'/api/resources/download/'+encodeURIComponent(v.filename)} download><span><b>Revision {v.revision}</b><small>{v.from_revision} → {v.revision} · {size(v.bytes)}</small></span><Download size={16} aria-hidden="true" /><span className="sr-only">下载</span></a>)}
-      {!data?.versions.length && <p>{error ? '版本列表暂时无法加载' : data ? '暂无增量包，首次更新仅建立基线。' : '正在读取版本…'}</p>}
+    <div className="header-resource-panel"><strong>资源更新包</strong>
+      <div className="resource-version-list">
+        {data?.versions.slice(0, 5).map(v => (
+          <a className="resource-version-item" key={v.filename} href={'/api/resources/download/' + encodeURIComponent(v.filename)} download aria-label={`下载资源更新包 ${v.from_revision} 至 ${v.revision}（${size(v.bytes)}）`}>
+            <span className="resource-version-info">
+              <b>Revision {v.revision}</b>
+              <small>{v.from_revision} → {v.revision} · {size(v.bytes)}</small>
+            </span>
+            <Download size={18} aria-hidden="true" />
+          </a>
+        ))}
+      </div>
+      {!data?.versions.length && <p role="status">{error ? '版本列表暂时无法加载' : data ? '暂无可下载的资源包' : '正在加载…'}</p>}
     </div>
   </details>;
 }

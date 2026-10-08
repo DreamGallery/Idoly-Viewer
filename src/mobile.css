@@ -13,8 +13,7 @@
  .header-left{gap:16px}
  .menu-toggle>span:last-child{width:43px}
  .brand-block .brand svg{width:124px}
- .header-resource summary{min-height:22px}
- .header-resource-panel{left:-60px}
+ .header-resource-panel{position:fixed;top:58px;left:16px;max-height:calc(100dvh - 74px)}
  .filter-options{width:100%}
  .filter-cycle{flex:1;min-width:0;min-height:44px}
  .event-switch button{min-height:44px}

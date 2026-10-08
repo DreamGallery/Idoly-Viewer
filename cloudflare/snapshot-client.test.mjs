@@ -14,11 +14,17 @@ test('browser pins nested media and later data/source requests while preserving 
  });
  const first=await client.resourceJson('/data/catalog.json');
  assert.equal(first.image,'/images/a.png?release=first');assert.equal(first.voices[0].url,'/api/media/voice/a.wav?release=first');assert.equal(first.remote,'https://example.com/a.png');
+ const direct='https://media.example.test/idoly-v1/media/'+'a'.repeat(64)+'/voice.flac';
+ assert.deepEqual(client.snapshotJson({audio:direct,video:'/media/'+'b'.repeat(64)+'/card.mp4'}),{audio:direct,video:'/media/'+'b'.repeat(64)+'/card.mp4'});
  assert.equal(client.resourceCatalogBase(),'/catalog/releases/first');
  assert.equal(client.resourceUrl('/api/source/demo'),'/api/source/demo?release=first');assert.equal(client.resourceUrl('/api/github/read'),'/api/github/read');
+ assert.equal(client.resourceUrl('/api/original/demo'),'/api/original/demo?release=first');
+ assert.equal(client.resourceUrl('/api/script/demo?work=1'),'/api/script/demo?work=1');
+ assert.equal(client.resourceUrl('/api/script/demo?work=1&release=old'),'/api/script/demo?work=1');
  await client.resourceJson('/data/directory.json?schema=v2');
  assert.equal(seen.at(-1),'/data/directory.json?schema=v2&release=first');
  client.acceptResourceSnapshot(new Response(null,{headers:{'X-Idoly-Release':'second'}}));
+ assert.equal(client.resourceUrl(direct),direct,'an existing index keeps its exact content-hash URL across publication');
  assert.equal(client.resourceUrl('/api/script/demo'),'/api/script/demo?release=first');
  // A bootstrap response from another generation is retried against the pinned one.
  let calls=0;

@@ -2,11 +2,11 @@ import type { IdolyVoices } from '../StoryChapter';
 import { taskDatePages } from './date-pages';
 import { TaskExport } from './TaskExport';
 import { exportTxt, downloadFile } from './export';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, Auth, Github, decode, encode, Issue } from './github';
-import { CsvTextInfo, extractInfoFromCsvText, mergeTranslation, toCsvText } from './upstream/csv';
-import { displayWorkUser, findWorkUser, subscribeWorkUsers, workUsersVersion, applyTrack, completeStage, completionPath, docFromIssue, DocTask, draftInfoOf, fetchRecordForWrite, myStatusOf, sameWorkUser, saveDraft, setAssigneeUsers, syncRecordTracks, TrackKey, validateRowsHtmlTags, WORK_BRANCH, WORK_OWNER, WORK_REPO } from './upstream/workflow';
+import { CsvTextInfo, type CsvDataLine, extractInfoFromCsvText, mergeTranslation, toCsvText } from './upstream/csv';
+import { applyTrack, completeStage, completionPath, docFromIssue, DocTask, draftInfoOf, fetchRecordForWrite, myStatusOf, sameWorkUser, saveDraft, syncRecordTracks, TrackKey, validateRowsHtmlTags, WORK_BRANCH, WORK_OWNER, WORK_REPO } from './upstream/workflow';
 import { docStatus, STORY_LABELS, storyKind } from './upstream/document-filter';
 import { ArrowLeft, UserRound } from 'lucide-react';
 import { useCatalog, type ChapterVoices } from '../catalog';
@@ -16,6 +16,7 @@ import { TranslationInput } from './TranslationInput';
 import {validateTranslation} from './idoly-script';
 import './workbench.css';
 import {DraftAutosave} from './autosave';
+import {buildVoiceMap} from './voice-map';
 
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 const taskTimestamp = (value?: string) => Date.parse(value || '') || 0;
@@ -26,12 +27,10 @@ function download(text: string, name: string) {
 }
 export function Login({ auth, refresh }: { auth: Auth | null; refresh: () => void }) {
   const [error, setError] = useState(''),[localName,setLocalName]=useState('');
-  useSyncExternalStore(subscribeWorkUsers, workUsersVersion);
-  return <div className="work-login">{auth?.user ? <><span>{findWorkUser(auth.user.login)?.[0] || auth.user.name || auth.user.login}</span><button onClick={() => { api('auth/logout', {}, auth.csrf).then(refresh).catch(e => setError(message(e))); }}>退出登录</button></> : auth?.local ? <><input aria-label="本地协作者名称" placeholder="本地协作者名称" value={localName} onChange={e=>setLocalName(e.target.value)}/><button onClick={()=>api('auth/local',{login:localName}).then(refresh).catch(e=>setError(message(e)))}>进入本地协作</button></> : auth?.configured ? <a className="work-button" href={'/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search)}>GitHub 登录</a> : <span>{auth ? "GitHub 登录尚未配置" : "正在检查登录状态…"}</span>}{error && <span role="alert">{error}</span>}</div>;
+  return <div className="work-login">{auth?.user ? <><span>{auth.user.name || auth.user.login}</span><button onClick={() => { api('auth/logout', {}, auth.csrf).then(refresh).catch(e => setError(message(e))); }}>退出登录</button></> : auth?.local ? <><input aria-label="本地协作者名称" placeholder="本地协作者名称" value={localName} onChange={e=>setLocalName(e.target.value)}/><button onClick={()=>api('auth/local',{login:localName}).then(refresh).catch(e=>setError(message(e)))}>进入本地协作</button></> : auth?.configured ? <a className="work-button" href={'/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search)}>GitHub 登录</a> : <span>{auth ? "GitHub 登录尚未配置" : "正在检查登录状态…"}</span>}{error && <span role="alert">{error}</span>}</div>;
 }
 export function WorkbenchPage() {
   const catalog=useCatalog();
-  useSyncExternalStore(subscribeWorkUsers, workUsersVersion);
   const [auth, setAuth] = useState<Auth | null>(null);
   const [docs, setDocs] = useState<DocTask[]>([]), [error, setError] = useState('');
   const [loading, setLoading] = useState(true), [reload, setReload] = useState(0);
@@ -53,13 +52,9 @@ export function WorkbenchPage() {
       if (!active) return;
       setAuth(a);
       if (!a.canCollaborate) return;
-      const w = new Github(a);
-      const users = await w.getContent(WORK_OWNER, WORK_REPO, WORK_BRANCH, 'users.json').catch(e => { if (e.response?.status !== 404) throw e; return null; });
-      if (!active) return;
-      setAssigneeUsers(users ? JSON.parse(decode(users.content)) : {});
       const all: DocTask[] = [];
       for (let p = 1; p <= 100; p++) {
-        const batch = await api<Issue[]>('github/read', { kind: 'issues', page: p });
+        const batch = await api<Issue[]>('github/read', { kind: 'issues', page: p }, a.csrf);
         if (!active) return;
         all.push(...batch.filter(i => !i.pull_request).map(docFromIssue));
         if (batch.length < 100) { setDocs([...new Map(all.map(d => [d.number, d])).values()]); return; }
@@ -96,13 +91,17 @@ export function WorkbenchPage() {
       setClaimNotice(`已认领 ${completed} 项${failures.length ? '\n' + failures.join('\n') : ''}`);
     }
   }
-  const shown = docs.filter(d => (d.title+' '+(catalog.story_titles?.[d.title]||'')).toLowerCase().includes(search.trim().toLowerCase())
-    && (!mine || !!auth?.user && [d.tr.user, d.pr.user].some(u => sameWorkUser(u, auth.user!.login)))
-    && (category === 'all' || storyKind(d.title) === category)
-    && (status === 'all' || docStatus(d) === status));
-  if (sort === 'updated') shown.sort((a,b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.number - b.number);
-  if (sort === 'name') shown.sort((a,b) => a.title.localeCompare(b.title, 'ja', { numeric: true }) || a.number - b.number);
-  const datePages = taskDatePages(shown);
+  const shown = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const result = docs.filter(d => (d.title+' '+(catalog.story_titles?.[d.title]||'')).toLowerCase().includes(query)
+      && (!mine || !!auth?.user && [d.tr.user, d.pr.user].some(u => sameWorkUser(u, auth.user!.login)))
+      && (category === 'all' || storyKind(d.title) === category)
+      && (status === 'all' || docStatus(d) === status));
+    if (sort === 'updated') result.sort((a,b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.number - b.number);
+    if (sort === 'name') result.sort((a,b) => a.title.localeCompare(b.title, 'ja', { numeric: true }) || a.number - b.number);
+    return result;
+  }, [docs,catalog.story_titles,search,mine,auth?.user,category,status,sort]);
+  const datePages = useMemo(() => taskDatePages(shown), [shown]);
   const pages = Math.max(1, datePages.length);
   const currentPage = Math.min(page, pages);
   const currentDate = datePages[currentPage - 1];
@@ -130,7 +129,7 @@ export function WorkbenchPage() {
       {exportMode ? <TaskExport tasks={docs.filter(d => selected.has(d.number))} auth={auth} /> : <div className="work-toolbar"><span>已选 {selected.size} 项 · 仅可选择待认领任务</span><button className="work-primary" disabled={claiming || !selected.size} onClick={claimSelected}>确认认领{selectionMode === 'tr' ? '翻译' : '校对'}</button></div>}</>}
       {claimNotice && <p className="work-export-notice" role="status">{claimNotice}</p>}
       <div className="work-tasks">{pageTasks.map(d => {
-        const content = <><small>{STORY_LABELS[storyKind(d.title)]} · {docStatus(d)}</small><strong>{catalog.story_titles?.[d.title]||d.title}</strong><small>{d.title}</small><span>翻译：{d.tr.state} {displayWorkUser(d.tr.user)}</span><span>校对：{d.pr.state} {displayWorkUser(d.pr.user)}</span><small className="work-task-date">{taskTimestamp(d.createdAt) ? <>发布于 <time dateTime={d.createdAt} title="北京时间">{publishedDate.format(new Date(d.createdAt!))}</time></> : '发布时间未提供'}</small></>;
+        const content = <><small>{STORY_LABELS[storyKind(d.title)]} · {docStatus(d)}</small><strong>{catalog.story_titles?.[d.title]||d.title}</strong><small>{d.title}</small><span>翻译：{d.tr.state} {d.tr.user.trim()}</span><span>校对：{d.pr.state} {d.pr.user.trim()}</span><small className="work-task-date">{taskTimestamp(d.createdAt) ? <>发布于 <time dateTime={d.createdAt} title="北京时间">{publishedDate.format(new Date(d.createdAt!))}</time></> : '发布时间未提供'}</small></>;
         return selectionMode
           ? <button key={d.number} type="button" disabled={claiming || !eligible(d)} className="work-task-option" aria-label={'选择 ' + d.title} aria-pressed={selected.has(d.number)} onClick={() => setSelected(prev => { const next = new Set(prev); if (next.has(d.number)) next.delete(d.number); else next.add(d.number); return next; })}>{content}</button>
           : <Link key={d.number} to={'/chapter/' + encodeURIComponent(d.title) + '?issue=' + d.number}>{content}</Link>;
@@ -157,14 +156,38 @@ function Speaker({ name, index, choice, title }: { name: string; index: number; 
   const [failed, setFailed] = useState(false);
   return <div className="work-speaker"><span className="work-speaker-avatar">{avatar && !failed ? <img src={avatar} alt="" loading="lazy" onError={() => setFailed(true)} /> : <UserRound size={24} aria-hidden="true" />}</span><small>{String(index + 1).padStart(3, '0')} · {label}</small></div>;
 }
+const TranslationRow = memo(function TranslationRow({ row, index, clips, disabled, onChange, onPlay }: {
+  row: CsvDataLine; index: number; clips?: ChapterVoices['lines'][number]['clips']; disabled: boolean;
+  onChange: (index: number, value: string) => void; onPlay: (audio: HTMLAudioElement) => void;
+}) {
+  const validation = validateTranslation(row.text, row.trans);
+  return <article className="work-row"><div className="work-original">
+    <Speaker name={row.name} index={index} choice={row.id.includes(':choice:')} title={row.id.includes(':title:')} />
+    <p>{row.text.replace(/\\n/g, '\n')}</p>
+    {clips && <VoicePlayer clips={clips} row={index + 1} onPlay={onPlay} />}
+  </div><div>
+    <TranslationInput index={index} value={row.trans} disabled={disabled} onChange={trans => onChange(index, trans)} />
+    {validation && <p className="row-validation" role="alert">{validation}</p>}
+  </div></article>;
+});
+
 export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: string; voices?: ChapterVoices; idolyVoices?: IdolyVoices }) {
-  useSyncExternalStore(subscribeWorkUsers, workUsersVersion);
   const playingAudio = useRef<HTMLAudioElement | null>(null);
   useEffect(() => () => { playingAudio.current?.pause(); }, []);
+  const playVoice = useCallback((audio: HTMLAudioElement) => {
+    if (playingAudio.current !== audio) playingAudio.current?.pause();
+    playingAudio.current = audio;
+  }, []);
   const [doc, setDoc] = useState<CsvTextInfo | null>(null), [sourceHash, setSourceHash] = useState(''), [auth, setAuth] = useState<Auth | null>(null), [task, setTask] = useState<DocTask | null>(null);
+  const canCollaborate = !!auth?.canCollaborate && !!auth.user;
+  const readerIdentity = canCollaborate ? 'github:' + auth.user!.login.toLowerCase() : 'original';
+  const [documentOwner, setDocumentOwner] = useState<string | null>(null);
+  const visibleDoc = documentOwner === readerIdentity ? doc : null;
   const [notice, setNotice] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [role, setRole] = useState<TrackKey>('tr'), [search, setSearch] = useState(''), [onlyEmpty, setOnlyEmpty] = useState(false), [changed, setChanged] = useState(false);
-  const [revising, setRevising] = useState(false), [remoteReady, setRemoteReady] = useState(false), [remoteLabel, setRemoteLabel] = useState('本地原文'), [draftAvailable, setDraftAvailable] = useState<string | null>(null);
-  const wrapper = useRef<Github | null>(null), baseRevision = useRef<Record<TrackKey, number>>({ tr: 0, pr: 0 }), storageKey = `idoly-draft-v1:${scriptId}`;
+  const [revising, setRevising] = useState(false), [remoteReady, setRemoteReady] = useState(false), [remoteLabel, setRemoteLabel] = useState('原文'), [draftAvailable, setDraftAvailable] = useState<string | null>(null);
+  const wrapper = useRef<Github | null>(null), baseRevision = useRef<Record<TrackKey, number>>({ tr: 0, pr: 0 });
+  // Keep personal browser edits separate from drafts loaded with repository access.
+  const storageKey = `${canCollaborate ? 'idoly-draft-v1' : 'idoly-local-draft-v1'}:${scriptId}`;
   const source = useRef<CsvTextInfo | null>(null), sourcePath = useRef(''), sourceGeneration = useRef(0);
   const latestDoc = useRef(doc), autosave = useRef<DraftAutosave | null>(null), savingRef = useRef(false);
   const [saving, setSaving] = useState(false), [draftLoaded, setDraftLoaded] = useState(false), [sourceConfirmed, setSourceConfirmed] = useState(false);
@@ -175,49 +198,65 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
   useEffect(() => {
     let active = true;
     api<Auth>('auth/status').then(a => { if (active) setAuth(a); }).catch(e => { if (active) setError(message(e)); });
-    const generation = sourceGeneration.current;
-    api<{ csv: string; sha256: string; label?: string }>('source/' + encodeURIComponent(scriptId)).then(s => {
-      if (!active || generation !== sourceGeneration.current) return; const parsed = extractInfoFromCsvText(s.csv); setRemoteLabel(s.label||'仓库稿件'); source.current = parsed; setSourceHash(s.sha256); setDoc(parsed);
-      try { const saved = localStorage.getItem(storageKey); if (saved) { const draft = JSON.parse(saved); if (draft.sha256 === s.sha256) { setDoc(mergeTranslation(parsed, draft.csv, false)); setNotice('已恢复此浏览器保存的译文；恢复操作不会修改 GitHub 文件'); setRemoteLabel('浏览器草稿'); setChanged(true); } else { setDraftAvailable(draft.csv); setNotice('原文已更新，旧草稿可下载后核对'); } } } catch { setNotice('本地草稿无法恢复，可继续编辑并导出 CSV'); }
+    return () => { active = false; };
+  }, [scriptId]);
+  useEffect(() => {
+    let active = true;
+    const generation = ++sourceGeneration.current;
+    setDoc(null); setDocumentOwner(null); setChanged(false); setRemoteReady(false); setDraftLoaded(false);
+    setRemoteLabel('原文');
+    setTask(null); setSourceReview(null); setSourceConfirmed(false); setNotice(''); setError(''); setDraftAvailable(null);
+    wrapper.current = null; source.current = null;
+    api<{ csv: string; sha256: string }>('original/' + encodeURIComponent(scriptId)).then(s => {
+      if (!active || generation !== sourceGeneration.current) return;
+      const parsed = extractInfoFromCsvText(s.csv);
+      setRemoteLabel('原文');
+      source.current = parsed; setSourceHash(s.sha256); setDoc(parsed); setDocumentOwner(readerIdentity);
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          const draft = JSON.parse(saved);
+          if (draft.sha256 === s.sha256) {
+            setDoc(mergeTranslation(parsed, draft.csv, false)); setNotice('已恢复此浏览器保存的译文'); setRemoteLabel('浏览器草稿'); setChanged(true);
+          } else {
+            setDraftAvailable(draft.csv); setNotice('原文已更新，旧草稿可下载后核对');
+          }
+        }
+      } catch { setNotice('本地草稿无法恢复，可继续编辑并导出 CSV'); }
     }).catch(e => { if (active && generation === sourceGeneration.current) setError(message(e)); });
     return () => { active = false; };
-  }, [scriptId, storageKey]);
-  useEffect(() => { setRemoteReady(false); wrapper.current = null; }, [auth?.user?.login]);
+  }, [scriptId, storageKey, canCollaborate, readerIdentity]);
+  const draftCsv = useMemo(() => visibleDoc && changed ? toCsvText(visibleDoc) : null, [visibleDoc,changed]);
   useEffect(() => {
-    if (!auth?.user) return;
-    let active = true;
-    new Github(auth).getContent(WORK_OWNER, WORK_REPO, WORK_BRANCH, 'users.json').then(file => {
-      if (active) setAssigneeUsers(JSON.parse(decode(file.content)));
-    }).catch(() => { /* Keep original account labels if the directory is unavailable. */ });
-    return () => { active = false; };
-  }, [auth]);
-  useEffect(() => {
-    if (!doc || !changed) return;
-    try { localStorage.setItem(storageKey, JSON.stringify({ sha256: sourceHash, csv: toCsvText(doc), savedAt: new Date().toISOString() })); } catch { setError('浏览器草稿保存失败，请导出 CSV 备份'); }
-  }, [doc, changed, sourceHash, storageKey]);
+    if (draftCsv === null) return;
+    try { localStorage.setItem(storageKey, JSON.stringify({ sha256: sourceHash, csv: draftCsv, savedAt: Date.now() })); } catch { setError('浏览器草稿保存失败，请导出 CSV 备份'); }
+  }, [draftCsv,sourceHash,storageKey]);
   useEffect(() => { if (!changed) return; const leave = (e: BeforeUnloadEvent) => { e.preventDefault(); }; window.addEventListener('beforeunload', leave); return () => window.removeEventListener('beforeunload', leave); }, [changed]);
   async function run(action: () => Promise<void>) { if (savingRef.current) return; setBusy(true); setError(''); try { await action(); } catch (e) { setError(message(e)); } finally { setBusy(false); } }
   async function connect() {
     if (!auth?.canCollaborate) throw new Error('登录并拥有工作仓库写权限后才能连接任务');
     if (auth.work.owner !== WORK_OWNER || auth.work.repo !== WORK_REPO || auth.work.branch !== WORK_BRANCH) throw new Error('前后端工作仓库配置不一致');
+    let generation = sourceGeneration.current;
     const w = new Github(auth);
-    try { const users = await w.getContent(WORK_OWNER, WORK_REPO, WORK_BRANCH, 'users.json'); setAssigneeUsers(JSON.parse(decode(users.content))); } catch (e) { if ((e as { response?: { status: number } }).response?.status !== 404) throw e; }
-    const matches = await api<Issue[]>('github/read', { kind: 'findIssue', scriptId }); const found = matches[0] && docFromIssue(matches[0]);
+    const matches = await api<Issue[]>('github/read', { kind: 'findIssue', scriptId }, auth.csrf); const found = matches[0] && docFromIssue(matches[0]);
+    if (generation !== sourceGeneration.current) return;
     if (!found) throw new Error('工作仓库尚未建立本章节任务；可以先本地编辑并导出 CSV');
-    sourceGeneration.current++;
+    generation = ++sourceGeneration.current;
     const currentSource = await api<{csv:string;sha256:string;path:string}>('collaboration/source/'+encodeURIComponent(scriptId));
+    if (generation !== sourceGeneration.current) return;
     const parsedSource = extractInfoFromCsvText(currentSource.csv);
     if (doc && doc.sourceHash !== parsedSource.sourceHash && changed) {
       setDraftAvailable(toCsvText(doc));
       if (!window.confirm('协作原文已更新。当前文字已保留为可下载的旧草稿，是否载入新版原文？')) return;
     }
     const nextDoc = doc?.sourceHash === parsedSource.sourceHash ? mergeTranslation(parsedSource, toCsvText(doc), false) : parsedSource;
-    source.current = parsedSource; setSourceHash(currentSource.sha256); setDoc(nextDoc); latestDoc.current = nextDoc;
+    source.current = parsedSource; setSourceHash(currentSource.sha256); setDoc(nextDoc); setDocumentOwner(readerIdentity); latestDoc.current = nextDoc;
     if (doc?.sourceHash !== parsedSource.sourceHash) setChanged(false);
     found.aiPath = 'story/ai/'+currentSource.path; sourcePath.current = found.aiPath;
     found.translatedPath = completionPath(found.aiPath, scriptId, 'tr');
     found.proofreadPath = completionPath(found.aiPath, scriptId, 'pr');
     const record = await fetchRecordForWrite(w, scriptId);
+    if (generation !== sourceGeneration.current) return;
     setSourceReview(record.source_change?.status === 'needs-confirmation' ? {hash:record.source_change.source_sha256,archives:Object.values(record.source_change.archived_artifacts || {}).filter((p):p is string => typeof p === 'string')} : null);
     setSourceConfirmed(false);
     setDraftLoaded(!draftInfoOf(record, role, auth.user?.login || ''));
@@ -227,10 +266,12 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
       const paths = [completionPath(found.aiPath, scriptId, r), draftInfoOf(record, r, auth.user?.login || '')?.path];
       for (const path of paths) if (path) try { await w.getContent(WORK_OWNER, WORK_REPO, WORK_BRANCH, path); } catch (e) { if ((e as { response?: { status: number } }).response?.status !== 404) throw e; }
     }
+    if (generation !== sourceGeneration.current) return;
     wrapper.current = w; setTask(found); setRemoteReady(true); setNotice(draftInfoOf(record, role, auth.user?.login || '') ? '已连接任务。请先恢复远端草稿，核对后继续编辑。' : '已连接任务，认领后编辑会自动保存到协作分支。');
   }
   async function loadStage(stage: 'ai' | 'translated' | 'proofread' | 'draft') {
-    if (!task || !wrapper.current || !source.current) return;
+    if (!canCollaborate || !task || !wrapper.current || !source.current) return;
+    const generation = sourceGeneration.current, currentSource = source.current;
     if (!draftLoaded && stage !== 'draft') throw new Error('远端已有未发布草稿，请先恢复远端草稿后再选择其他版本');
     if (changed && !window.confirm('载入远端译文将替换翻译框中的现有文字。建议先导出 CSV 备份，是否继续？')) return;
     const w = new Github(auth!);
@@ -239,17 +280,26 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     if (stage === 'draft' && (!draft || draft.stale)) throw new Error(draft?.stale ? '远端草稿基于旧版本，请在 GitHub 下载后核对' : '没有远端草稿');
     const path = stage === 'ai' ? task.aiPath : stage === 'translated' ? task.translatedPath : stage === 'proofread' ? task.proofreadPath : draft!.path;
     const file = await w.getContent(WORK_OWNER, WORK_REPO, WORK_BRANCH, path);
-    const loaded = mergeTranslation(source.current, decode(file.content));
+    if (generation !== sourceGeneration.current) return;
+    const loaded = mergeTranslation(currentSource, decode(file.content));
     // Only explicit restoration accepts a new conflict baseline.
     for (const track of ['tr','pr'] as const) {
       for (const editable of [completionPath(sourcePath.current, scriptId, track), draftInfoOf(record,track,auth!.user!.login)?.path]) {
         if (editable) try { await w.getContent(WORK_OWNER, WORK_REPO, WORK_BRANCH, editable); } catch (e) { if ((e as {response?:{status:number}}).response?.status !== 404) throw e; }
       }
     }
+    if (generation !== sourceGeneration.current) return;
     wrapper.current = w;
     baseRevision.current = {tr:Number(record.translation?.revision || 0),pr:Number(record.proofread?.revision || 0)};
     localStorage.setItem(storageKey, JSON.stringify({sha256:sourceHash,csv:toCsvText(loaded),savedAt:new Date().toISOString()}));
     setDoc(loaded); latestDoc.current = loaded; setDraftLoaded(true); setChanged(false); setRemoteLabel({ ai: '机器译文', translated: '翻译正式稿', proofread: '校对正式稿', draft: '远端草稿' }[stage]); setNotice('已载入' + { ai: '机器译文', translated: '翻译正式稿', proofread: '校对正式稿', draft: 'GitHub 草稿' }[stage] + '，并保存到此浏览器；此操作不会修改 GitHub 文件');
+  }
+  async function importCsv(file: File) {
+    const generation = sourceGeneration.current, currentSource = source.current;
+    if (!currentSource) return;
+    const csv = await file.text();
+    if (generation !== sourceGeneration.current) return;
+    setDoc(mergeTranslation(currentSource, csv)); setChanged(true); setRemoteLabel('导入译文');
   }
   async function freshTask() {
     if (!wrapper.current || !task || !auth?.user) throw new Error('请登录并连接任务');
@@ -283,7 +333,7 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
   }
   useEffect(() => { submitRef.current = csv => submit(false, csv); });
   useEffect(() => {
-    if (!remoteReady || !draftLoaded || busy) return;
+    if (!canCollaborate || !remoteReady || !draftLoaded || busy) return;
     const queue = new DraftAutosave(async csv => {
       savingRef.current = true; setSaving(true);
       try { await submitRef.current(csv); }
@@ -293,38 +343,28 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     });
     autosave.current = queue;
     return () => { queue.stop(); if (autosave.current === queue) autosave.current = null; };
-  }, [remoteReady, draftLoaded, busy, role, scriptId, auth?.user?.login]);
+  }, [canCollaborate, remoteReady, draftLoaded, busy, role, scriptId, auth?.user?.login]);
   const active = task && auth?.user ? myStatusOf(task.tr, task.pr, auth.user.login, revising ? role : undefined) : null;
   useEffect(() => {
-    if (doc && changed && remoteReady && draftLoaded && !busy && active?.activeRole === role) autosave.current?.update(toCsvText(doc));
-  }, [doc, changed, remoteReady, draftLoaded, busy, active?.activeRole, role]);
+    if (draftCsv !== null && remoteReady && draftLoaded && !busy && active?.activeRole === role) autosave.current?.update(draftCsv);
+  }, [draftCsv, remoteReady, draftLoaded, busy, active?.activeRole, role]);
   const working = busy || saving;
-  const voiceMap = new Map<number, NonNullable<ChapterVoices>['lines'][number]>();
-  if (doc && source.current && voices?.source_sha256 === sourceHash) {
-    for (const line of voices.lines) {
-      const record = source.current.records[line.record_index - 1];
-      if (record && record.text === line.text && record.name === line.speaker) {
-        const index = source.current.data.indexOf(record);
-        if (index >= 0) voiceMap.set(index, line);
-      }
-    }
-  }
-  if (doc && source.current && idolyVoices) {
-    for (const line of idolyVoices.lines) {
-      const index = source.current.data.findIndex(row => row.id === line.row_id && row.text === line.text && row.name === line.speaker);
-      if (index >= 0) voiceMap.set(index, { record_index: index + 1, text: line.text, speaker: line.speaker, clips: line.clips });
-    }
-  }
-  const rows = doc?.data.map((row, i) => ({ row, i })).filter(({ row }) => (!onlyEmpty || !row.trans.trim()) && (!search || [row.name, row.text, row.trans].some(t => t.includes(search))));
+  const currentSource = source.current;
+  const voiceMap = useMemo(() => buildVoiceMap(currentSource, sourceHash, voices, idolyVoices), [currentSource,sourceHash,voices,idolyVoices]);
+  const editRow = useCallback((index: number, trans: string) => {
+    setDoc(current => current && ({ ...current, data: current.data.map((row, i) => i === index ? { ...row, trans } : row) }));
+    setChanged(true);
+  }, []);
+  const rows = visibleDoc?.data.map((row, i) => ({ row, i })).filter(({ row }) => (!onlyEmpty || !row.trans.trim()) && (!search || [row.name, row.text, row.trans].some(t => t.includes(search))));
   return <section className="work-editor" aria-label="剧情翻译编辑器"><header><h2>剧情文本</h2><Login auth={auth} refresh={refreshAuth} /></header>
-    <div className="work-toolbar">{auth?.local&&<p className="local-notice">本地协作测试 · 所有提交保存在本机</p>}<span>{remoteLabel} · {doc?.data.filter(r => r.trans.trim()).length || 0} / {doc?.data.length || 0}</span><button disabled={!doc} onClick={() => run(async()=>{if(doc){const errors=validateRowsHtmlTags(doc.data);if(errors.length)throw new Error(errors.join('；'));download(toCsvText(doc),scriptId+'.csv')}})}>导出 CSV</button><label className="work-button">导入 CSV<input type="file" accept=".csv,text/csv" hidden disabled={!doc || working} onChange={e => { const file = e.target.files?.[0]; if (file && source.current) run(async () => { setDoc(mergeTranslation(source.current!, await file.text())); setChanged(true); setRemoteLabel('导入译文'); }); e.target.value = ''; }} /></label><button disabled={!doc || working} onClick={() => run(async () => { if (doc) { downloadFile(await exportTxt(scriptId, toCsvText(doc), remoteReady), scriptId + '.txt'); setNotice('TXT 已导出；未翻译的台词保留原文'); } })}>导出 TXT</button>{draftAvailable && <button onClick={() => download(draftAvailable, scriptId + '-旧草稿.csv')}>下载旧草稿</button>}</div>
+    <div className="work-toolbar">{auth?.local&&<p className="local-notice">本地协作测试 · 所有提交保存在本机</p>}<span>{remoteLabel} · {visibleDoc?.data.filter(r => r.trans.trim()).length || 0} / {visibleDoc?.data.length || 0}</span><button disabled={!visibleDoc} onClick={() => run(async()=>{if(visibleDoc){const errors=validateRowsHtmlTags(visibleDoc.data);if(errors.length)throw new Error(errors.join('；'));download(toCsvText(visibleDoc),scriptId+'.csv')}})}>导出 CSV</button><label className="work-button">导入 CSV<input type="file" accept=".csv,text/csv" hidden disabled={!visibleDoc || working} onChange={e => { const file = e.target.files?.[0]; if (file) run(() => importCsv(file)); e.target.value = ''; }} /></label><button disabled={!visibleDoc || working} onClick={() => run(async () => { if (visibleDoc) { downloadFile(await exportTxt(scriptId, toCsvText(visibleDoc), remoteReady), scriptId + '.txt'); setNotice('TXT 已导出；未翻译的台词保留原文'); } })}>导出 TXT</button>{visibleDoc && draftAvailable && <button onClick={() => download(draftAvailable, scriptId + '-旧草稿.csv')}>下载旧草稿</button>}</div>
     {auth?.canCollaborate && <div className="work-collaboration"><div className="work-toolbar"><select aria-label="协作工序" value={role} disabled={working} onChange={e => { setRole(e.target.value as TrackKey); setRevising(false); setRemoteReady(false); setDraftLoaded(false); }}><option value="tr">翻译</option><option value="pr">校对</option></select>{remoteReady && task && <><button disabled={working || !auth?.user || task[role].state !== '待认领'} onClick={() => run(claim)}>认领{role === 'tr' ? '翻译' : '校对'}</button>{task[role].state === '完成' && !revising && <button disabled={working || !auth?.user} onClick={() => setRevising(true)}>修订{role === 'tr' ? '翻译' : '校对'}</button>}</>}<button disabled={working || remoteReady} onClick={() => run(connect)}>{remoteReady ? '已连接任务' : '连接协作任务'}</button>{task && !auth?.local && <a href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/issues/${task.number}`} target="_blank" rel="noreferrer">任务 #{task.number}</a>}</div>
-    {remoteReady && task && <><p>翻译：{task.tr.state} {displayWorkUser(task.tr.user) || '—'} / 校对：{task.pr.state} {displayWorkUser(task.pr.user) || '—'}</p><div className="work-toolbar">{(['ai', 'translated', 'proofread', 'draft'] as const).map((s, i) => <button disabled={working} key={s} onClick={() => run(() => loadStage(s))}>{['载入机器译文', '载入翻译稿', '载入校对稿', '恢复远端草稿'][i]}</button>)}</div>{active?.blocked && <p>{active.blockMsg}</p>}</>}
+    {remoteReady && task && <><p>翻译：{task.tr.state} {task.tr.user.trim() || '—'} / 校对：{task.pr.state} {task.pr.user.trim() || '—'}</p><div className="work-toolbar">{(['ai', 'translated', 'proofread', 'draft'] as const).map((s, i) => <button disabled={working} key={s} onClick={() => run(() => loadStage(s))}>{['载入机器译文', '载入翻译稿', '载入校对稿', '恢复远端草稿'][i]}</button>)}</div>{active?.blocked && <p>{active.blockMsg}</p>}</>}
     </div>}{error && <p className="work-error" role="alert">{error}</p>}{notice && <p className="work-notice" role="status">{notice}</p>}{working && <p role="status">{saving ? '正在保存到协作分支…' : '正在处理…'}</p>}
     {voices?.source_sha256 && sourceHash && voices.source_sha256 !== sourceHash && <p className="work-notice">原文版本与语音索引不一致，请更新索引后播放。</p>}
-    {sourceReview && <div className="work-notice"><p>原文已更新，请核对保留的译文。{sourceReview.archives.map((path,i) => <a key={path} href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/blob/${WORK_BRANCH}/${path}`} target="_blank" rel="noreferrer"> 旧稿 {i+1}</a>)}</p><label><input type="checkbox" checked={sourceConfirmed} onChange={e => setSourceConfirmed(e.target.checked)} /> 已核对当前原文及迁移译文</label></div>}
-    {doc ? <><div className="work-toolbar"><input aria-label="搜索台词" placeholder="搜索角色或台词" value={search} onChange={e => setSearch(e.target.value)} /><button aria-pressed={onlyEmpty} onClick={() => setOnlyEmpty(!onlyEmpty)}>只看未翻译</button><span>{remoteReady && draftLoaded ? '编辑自动保存到协作分支，浏览器保留备份' : '编辑自动保存到此浏览器；协作保存需先连接任务并载入已有草稿'}</span></div><div className="work-rows">{rows?.map(({ row, i }) => <article className="work-row" key={i}><div className="work-original"><Speaker name={row.name} index={i} choice={row.id.includes(':choice:')} title={row.id.includes(':title:')} /><p>{row.text.replace(/\\n/g, '\n')}</p>{voiceMap.get(i) && <VoicePlayer clips={voiceMap.get(i)!.clips} row={i + 1} onPlay={audio => { if (playingAudio.current !== audio) playingAudio.current?.pause(); playingAudio.current = audio; }} />}</div><div><TranslationInput index={i} value={row.trans} disabled={busy} onChange={trans => { setDoc(d => d && ({ ...d, data: d.data.map((r, n) => n === i ? { ...r, trans } : r) })); setChanged(true); }} />{validateTranslation(row.text,row.trans)&&<p className="row-validation" role="alert">{validateTranslation(row.text,row.trans)}</p>}</div></article>)}</div></> : !error && <p>正在读取原文…</p>}
-    {doc && auth?.canCollaborate && <footer className="work-editor-actions">{remoteReady && task && <div className="work-toolbar"><button disabled={working || active?.activeRole !== role} onClick={() => run(() => submit(false))}>{auth?.local?'保存本地协作草稿':'保存 GitHub 草稿'}</button><button className="work-primary" disabled={working || active?.activeRole !== role} onClick={() => run(() => submit(true))}>完成{role === 'tr' ? '翻译' : '校对'}</button></div>}
+    {canCollaborate && sourceReview && <div className="work-notice"><p>原文已更新，请核对保留的译文。{sourceReview.archives.map((path,i) => <a key={path} href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/blob/${WORK_BRANCH}/${path}`} target="_blank" rel="noreferrer"> 旧稿 {i+1}</a>)}</p><label><input type="checkbox" checked={sourceConfirmed} onChange={e => setSourceConfirmed(e.target.checked)} /> 已核对当前原文及迁移译文</label></div>}
+    {visibleDoc ? <><div className="work-toolbar"><input aria-label="搜索台词" placeholder="搜索角色或台词" value={search} onChange={e => setSearch(e.target.value)} /><button aria-pressed={onlyEmpty} onClick={() => setOnlyEmpty(!onlyEmpty)}>只看未翻译</button><span>{canCollaborate && remoteReady && draftLoaded ? '编辑自动保存到协作分支，浏览器保留备份' : '编辑自动保存到此浏览器'}</span></div><div className="work-rows">{rows?.map(({ row, i }) => <TranslationRow key={i} row={row} index={i} clips={voiceMap.get(i)?.clips} disabled={busy} onChange={editRow} onPlay={playVoice} />)}</div></> : !error && <p>正在读取原文…</p>}
+    {visibleDoc && canCollaborate && <footer className="work-editor-actions">{remoteReady && task && <div className="work-toolbar"><button disabled={working || active?.activeRole !== role} onClick={() => run(() => submit(false))}>{auth?.local?'保存本地协作草稿':'保存 GitHub 草稿'}</button><button className="work-primary" disabled={working || active?.activeRole !== role} onClick={() => run(() => submit(true))}>完成{role === 'tr' ? '翻译' : '校对'}</button></div>}
 {error && <p className="work-error" role="alert">{error}</p>}{working && <p role="status">{saving ? '正在保存到协作分支…' : '正在处理…'}</p>}</footer>}
   </section>;
 }

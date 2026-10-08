@@ -15,6 +15,7 @@ WORK = ROOT.parent
 sys.path.insert(0, str(ROOT))
 from idoly_story_index.exclusions import confirmed_exclusions
 from idoly_story_index.translation_status import translation_status
+from idoly_story_index.public_text import original_story
 
 def digest(value):
     return hashlib.sha256(value).hexdigest()
@@ -41,6 +42,7 @@ def main():
     parser.add_argument('--translations', type=Path, default=WORK/'Idoly-localify-translations')
     parser.add_argument('--output', type=Path, default=ROOT/'public/data')
     parser.add_argument('--report', type=Path, default=ROOT/'reports/data-validation.json')
+    parser.add_argument('--original-only', action='store_true', help='Publish original dialogue only; keep public catalog metadata and completion counts')
     args = parser.parse_args()
     public = args.output.parent
     spec = importlib.util.spec_from_file_location('toolkit_adv', args.toolkit/'src/adv_csv.py')
@@ -112,7 +114,7 @@ def main():
             for layer, translated in candidates.items():
                 item = translated.get(row['id'])
                 if item and item['text'] == row['text'] and item['name'] == row['name']:
-                    if layer == 'reviewed' and item['trans'].strip():
+                    if not args.original_only and layer == 'reviewed' and item['trans'].strip():
                         try: adv.validate_translation(f, item['trans'])
                         except ValueError as e:
                             failures.append({'story': sid, 'row': row['id'], 'layer': layer, 'message': str(e)})
@@ -121,13 +123,13 @@ def main():
                 elif item:
                     mismatches.append({'story': sid, 'row': row['id'], 'layer': layer})
             row['trans'] = row['reviewed'] or row['human'] or row['ai']
-            if row['trans']:
+            if row['trans'] and not args.original_only:
                 try: adv.validate_translation(f, row['trans'])
                 except ValueError as e: failures.append({'story': sid, 'row': row['id'], 'message': str(e)})
         title_row = next((r for r in rows if ':title:' in r['id']), None)
         master = by_asset.get(sid.removeprefix('adv_'))
         original_title = (master or {}).get('name') or (title_row or {}).get('text') or sid
-        title = localized.get((master or {}).get('id'), {}).get('name') or (title_row or {}).get('trans') or original_title
+        title = localized.get((master or {}).get('id'), {}).get('name') or (None if args.original_only else (title_row or {}).get('trans')) or original_title
         if re.fullmatch(r'adv_userhbd_\d+_[a-z]+', sid):
             title = '玩家生日'
         cast = sorted({r['character'] for r in rows if r['character']})
@@ -137,7 +139,7 @@ def main():
         if not any(r['id'] == 'info' and r['text'] == item['sourceFileHash'] for r in metadata):
             raise ValueError(f'Source checksum mismatch: {sid}')
         payload = {**item, 'rows': rows, 'metadata': metadata, 'script': script, 'names': {r['name']: names.get(r['name'], r['name']) for r in rows if r['name']}}
-        write_json(args.output/'stories'/f'{sid}.json', payload)
+        write_json(args.output/'stories'/f'{sid}.json', original_story(payload) if args.original_only else payload)
         index.append(item)
     def commit(p):
         return subprocess.check_output(['git','-C',str(p),'rev-parse','HEAD'],text=True).strip()

@@ -6,17 +6,23 @@ import {createReadStream} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {resolve,relative,basename,extname,sep} from 'node:path';
 import {parseArgs} from 'node:util';
-const {values}=parseArgs({options:{input:{type:'string'},output:{type:'string',default:'release/r2'},release:{type:'string'},prefix:{type:'string',default:'idoly-v1'}}});
+import {originalCsv,originalStory} from '../server/public-story.mjs';
+const {values}=parseArgs({options:{input:{type:'string'},output:{type:'string',default:'release/r2'},release:{type:'string'},prefix:{type:'string',default:'idoly-v1'},'public-base':{type:'string',default:process.env.IDOLY_R2_PUBLIC_BASE_URL || ''}}});
 if(!values.input) throw new Error('Usage: node scripts/package-idoly-resources.mjs --input <snapshot with web/story/adv/media> [--output release/r2] [--release id] [--prefix idoly-v1]');
 const sourceManifest=JSON.parse(await readFile(resolve(values.input,'web/catalog/manifest.json'),'utf8'));
 const release=values.release || /^\/catalog\/releases\/([A-Za-z0-9_-]+)$/.exec(sourceManifest.base_path || '')?.[1];
 if(!release || !/^[A-Za-z0-9_-]+$/.test(release)) throw new Error('Invalid release ID');
 const prefix=values.prefix;
 if(!prefix || prefix.split('/').some(p=>!p || p==='.' || p==='..') || /[\\\x00-\x1f]/.test(prefix)) throw new Error('Invalid prefix');
+const publicBase=values['public-base'].trim().replace(/\/+$/,'');
+if(publicBase) {
+ let base;try{base=new URL(publicBase);}catch{throw new Error('Public media base must be an HTTPS origin');}
+ if(base.protocol!=='https:' || base.username || base.password || base.pathname!=='/' || base.search || base.hash || /[\s\\\x00-\x1f]/.test(publicBase))throw new Error('Public media base must be an HTTPS origin without a path or credentials');
+}
 const input=resolve(values.input), root=resolve(values.output,release);
 if(root===input || root.startsWith(input+sep)) throw new Error('Output must be outside the input snapshot');
 const types={'.json':'application/json; charset=utf-8','.csv':'text/csv; charset=utf-8','.txt':'text/plain; charset=utf-8','.png':'image/png','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml','.wav':'audio/wav','.flac':'audio/flac','.ogg':'audio/ogg','.mp3':'audio/mpeg','.m4a':'audio/mp4','.mp4':'video/mp4','.webm':'video/webm'};
-const files={}, objects=[], seen=new Set();
+const files={}, objects=[], seen=new Set(), entries=[], mediaUrls=new Map();
 async function digest(path){const hash=createHash('sha256');for await(const chunk of createReadStream(path))hash.update(chunk);return hash.digest('hex');}
 async function put(key,content){
  const path=resolve(root,key);await mkdir(resolve(path,'..'),{recursive:true});await writeFile(path,content);
@@ -30,13 +36,8 @@ async function walk(dir){
   if(!entry.isFile()) throw new Error('Unsupported snapshot entry: '+path);
   const logical=relative(input,path).split(sep).join('/');
   if(/[\\\x00-\x1f]/.test(logical)) throw new Error('Invalid snapshot path');
-  const sha256=await digest(path), type=types[extname(path).toLowerCase()] || 'application/octet-stream';
   const media=logical.startsWith('media/') || logical.startsWith('web/images/');
-  const key=(media?'media':'text')+'/'+sha256+'/'+basename(path);
-  files[logical]=key;
-  if(seen.has(key))continue;
-  seen.add(key);const dest=resolve(root,key);await mkdir(resolve(dest,'..'),{recursive:true});await copyFile(path,dest);
-  objects.push({key:prefix+'/'+key,path:dest,bytes:(await stat(path)).size,sha256,contentType:type});
+  entries.push({path,logical,media});
  }
 }
 const catalog=JSON.parse(await readFile(resolve(input,'web/data/catalog.json'),'utf8'));
@@ -45,6 +46,31 @@ const manifest=sourceManifest;
 // Pin the source metadata to this release, so readers never mix pointer generations.
 if(manifest.base_path!==`/catalog/releases/${release}`) throw new Error('web/catalog/manifest.json base_path must be /catalog/releases/'+release);
 for(const dir of ['web','story','adv','media']){try{await walk(resolve(input,dir));}catch(e){if(e.code!=='ENOENT' || dir!=='media')throw e;}}
+function rewrite(value) {
+ if(Array.isArray(value))return value.map(rewrite);
+ if(value && typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,rewrite(item)]));
+ return typeof value==='string' ? mediaUrls.get(value) || value : value;
+}
+for(const {path,logical,media} of entries.sort((a,b)=>Number(b.media)-Number(a.media))) {
+ let body;
+ if(logical.startsWith('story/')) {
+  if(extname(path)!=='.csv')throw new Error('Only original CSV belongs in the public story directory');
+  body=Buffer.from(originalCsv(await readFile(path,'utf8')));
+ } else if(logical.startsWith('web/') && !media && extname(path)==='.json') {
+  let value=JSON.parse(await readFile(path,'utf8'));
+  if(logical.startsWith('web/data/stories/'))value=originalStory(value);
+  if(logical.startsWith('web/catalog/') && logical.includes('/chapters/'))value.label='原文';
+  body=Buffer.from(JSON.stringify(rewrite(value)));
+ }
+ const sha256=body ? createHash('sha256').update(body).digest('hex') : await digest(path);
+ const key=(media?'media':'text')+'/'+sha256+'/'+basename(path);
+ files[logical]=key;
+ if(media)mediaUrls.set(logical.startsWith('web/')?'/'+logical.slice(4):'/api/'+logical,(publicBase?publicBase+'/'+prefix:'')+'/'+key.split('/').map(encodeURIComponent).join('/'));
+ if(seen.has(key))continue;
+ seen.add(key);const dest=resolve(root,key);await mkdir(resolve(dest,'..'),{recursive:true});
+ if(body)await writeFile(dest,body);else await copyFile(path,dest);
+ objects.push({key:prefix+'/'+key,path:dest,bytes:body?body.byteLength:(await stat(path)).size,sha256,contentType:types[extname(path).toLowerCase()] || 'application/octet-stream'});
+}
 const shards={}, groups={};
 for(const [logical,target] of Object.entries(files)) {
  const shard=createHash('sha256').update(logical,'utf8').digest('hex').slice(0,2);
@@ -54,7 +80,7 @@ for(const shard of Object.keys(groups).sort()) {
  const key=`releases/${release}/maps/${shard}.json`;shards[shard]=key;
  await put(key,JSON.stringify({files:groups[shard]}));
 }
-await put(`releases/${release}/file-map.json`,JSON.stringify({schema_version:1,files:{},shards}));
-await put('current.json',JSON.stringify({schema_version:1,release,published_at:new Date().toISOString(),versions:{revision:catalog.provenance?.revision ?? null,versions:[]}}));
+await put(`releases/${release}/file-map.json`,JSON.stringify({schema_version:1,text_policy:'original-only',files:{},shards}));
+await put('current.json',JSON.stringify({schema_version:1,text_policy:'original-only',release,published_at:new Date().toISOString(),versions:{revision:catalog.provenance?.revision ?? null,versions:[]}}));
 await writeFile(resolve(root,'upload-manifest.json'),JSON.stringify({schema_version:1,release,prefix,objects,publishLast:prefix+'/current.json'},null,2));
 console.log(JSON.stringify({release,objects:objects.length,bytes:objects.reduce((n,o)=>n+o.bytes,0),manifest:resolve(root,'upload-manifest.json')}));
