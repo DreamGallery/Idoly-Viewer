@@ -10,9 +10,9 @@
 [data-theme=dark] .work-row textarea{background:var(--card)}[data-theme=dark] .work-error{color:#f2a4a4}[data-theme=dark] .work-notice{color:var(--primary)}
 @media(max-width:700px){.work-row{grid-template-columns:1fr;gap:4px}.work-toolbar button,.work-button{font-size:.8rem}.work-editor header{align-items:flex-start}.work-toolbar input{width:100%}}
 
-.work-heading .section-title{margin-bottom:24px}.work-page select{border:1px solid var(--input);border-radius:8px;padding:8px 12px;background:transparent;color:inherit;font:inherit}.work-page .work-toolbar label{display:flex;align-items:center;gap:8px;font-size:.85rem}.work-page .work-access{padding:24px;border:1px solid var(--border);border-radius:12px}.work-page button:disabled{opacity:.4;cursor:not-allowed}.work-page .back-link{display:inline-flex;align-items:center;gap:8px}.work-tasks small{opacity:.65}.work-heading{margin-bottom:16px}
+.work-page select{border:1px solid var(--input);border-radius:8px;padding:8px 12px;background:transparent;color:inherit;font:inherit}.work-page .work-toolbar label{display:flex;align-items:center;gap:8px;font-size:.85rem}.work-page .work-access{padding:24px;border:1px solid var(--border);border-radius:12px}.work-page button:disabled{opacity:.4;cursor:not-allowed}.work-page .back-link{display:inline-flex;align-items:center;gap:8px}.work-tasks small{opacity:.65}
 
-.work-page .work-heading{display:block;position:relative;margin:0}.work-heading .section-title{margin:0}.work-heading .work-login{position:absolute;right:6%;top:80px;z-index:2}.work-page .work-tasks{grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}@media(max-width:700px){.work-heading .work-login{position:static;padding:0 6% 20px}.work-page .work-tasks{grid-template-columns:1fr}}
+.work-heading .work-login{margin-left:auto;width:auto;max-width:100%;justify-content:flex-end}.work-login .work-button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;white-space:nowrap}.work-page .work-tasks{grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}@media(max-width:700px){.work-page .work-tasks{grid-template-columns:1fr}}
 
 /* Wider two-column editor, keeping the shared mobile chapter layout. */
 @media(min-width:901px){main.chapter-page{padding-left:4%;padding-right:4%}.chapter-page .chapter-sheet{max-width:1240px;padding:36px 40px}}

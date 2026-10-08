@@ -106,8 +106,8 @@ export function WorkbenchPage() {
   const currentPage = Math.min(page, pages);
   const currentDate = datePages[currentPage - 1];
   const pageTasks = currentDate?.tasks || [];
-  return <main className="work-page">
-    <header className="work-heading"><div className="section-title"><span className="section-en" aria-hidden="true">TRANSLATION</span><div><h1>翻译协作</h1></div></div><Login auth={auth} refresh={refresh} /></header>
+  return <section className="work-page">
+    <header className="page-heading work-heading"><div><p className="eyebrow">TRANSLATION WORKSPACE</p><h2>翻译协作</h2></div><Login auth={auth} refresh={refresh} /></header>
     <section className="category-directory">{auth?.local&&<p className="local-notice">本地协作测试 · 任务与稿件仅保存到本机，不会提交 GitHub。</p>}
     {error && <p className="work-error" role="alert">{error}<button onClick={refresh}>重试</button></p>}
     {loading && <p role="status">正在读取协作信息…</p>}
@@ -144,7 +144,7 @@ export function WorkbenchPage() {
       </nav>}
     </>}
     </section>
-  </main>;
+  </section>;
 }
 function Speaker({ name, index, choice, title }: { name: string; index: number; choice: boolean; title: boolean }) {
   const catalog = useCatalog();
