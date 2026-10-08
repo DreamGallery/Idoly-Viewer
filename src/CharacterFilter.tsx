@@ -16,12 +16,13 @@ export default function CharacterFilter({ data, directory, group, character, onG
   const indexedCards = new Set(data.stories.filter(story=>story.category==='card'&&story.masterId).map(story=>directory?.stories[story.id]?.group));
   return data.characters.filter(c => directory?.nodes['card:'+c.id]?.children.some(id=>indexedCards.has(id)));
  }, [data,directory]);
+ const groups = data.groups.filter(g=>available.some(c=>c.group===g.id)).sort((a,b)=>Number(colorGroupIcons.has(b.id))-Number(colorGroupIcons.has(a.id)));
  const characters = available.filter(c => group === 'all' || c.group === group);
  const active=cardFilters.attribute!=='all'||cardFilters.role!=='all'||cardFilters.spOnly||cardFilters.evolutionOnly;
  return <section className="card-character-filter" aria-label="卡牌剧情角色筛选">
   <div className="character-group-options" role="group" aria-label="筛选组合">
    <button aria-pressed={group==='all'} onClick={()=>onGroupChange('all')}>全部组合</button>
-   {data.groups.filter(g=>available.some(c=>c.group===g.id)).map(g=><button key={g.id} className="character-group-logo" aria-label={g.name} aria-pressed={group===g.id} onClick={()=>onGroupChange(g.id)}>{colorGroupIcons.has(g.id)?<img src={resourceUrl('/images/groups/color/'+g.id+'.png')} alt=""/>:<span aria-hidden="true" style={{backgroundColor:/^[0-9a-f]{6}$/i.test(g.color)?'#'+g.color:undefined,maskImage:`url(${resourceUrl('/images/groups/'+g.id+'.png')})`,WebkitMaskImage:`url(${resourceUrl('/images/groups/'+g.id+'.png')})`}}/>}</button>)}
+   {groups.map(g=><button key={g.id} className="character-group-logo" aria-label={g.name} aria-pressed={group===g.id} onClick={()=>onGroupChange(g.id)}>{colorGroupIcons.has(g.id)?<img src={resourceUrl('/images/groups/color/'+g.id+'.png')} alt=""/>:<span className={g.id==='character_group_mku'?'group-logo-miku':undefined} aria-hidden="true" style={{color:/^[0-9a-f]{6}$/i.test(g.color)?'#'+g.color:undefined,maskImage:`url(${resourceUrl('/images/groups/'+g.id+'.png')})`,WebkitMaskImage:`url(${resourceUrl('/images/groups/'+g.id+'.png')})`}}/>}</button>)}
   </div>
   <div className="chibi-character-options" role="group" aria-label="筛选角色">
    <button className="chibi-character" aria-pressed={!character} onClick={()=>onCharacterChange('')}><span className="chibi-avatar chibi-all"><Users size={27}/></span><span>全部角色</span></button>

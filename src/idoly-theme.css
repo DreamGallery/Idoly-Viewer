@@ -46,7 +46,7 @@
 [data-theme=dark] .card-trait-icon.trait-dance[aria-pressed=true]{color:#79b0ff}
 [data-theme=dark] .card-trait-icon.trait-visual[aria-pressed=true]{color:#e1bd55}
 [data-theme=dark] .card-sp-filter[aria-pressed=true]{color:#aaaeb9}
-[data-theme=dark] .character-group-logo span{filter:brightness(0) invert(.85)}
+[data-theme=dark] .character-group-logo .group-logo-miku{background-color:#39c5bb}
 [data-theme=dark] .chibi-all,[data-theme=dark] .chibi-character[aria-pressed=true] .chibi-all{color:var(--night-accent)}
 [data-theme=dark] .status-tag,[data-theme=dark] .updates-pending,[data-theme=dark] .update-kind.modified{background:#383323;color:#e8ce90}
 [data-theme=dark] .directory-story-meta .status-tag{background:transparent;color:#c1cbe0}
