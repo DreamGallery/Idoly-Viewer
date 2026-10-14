@@ -90,6 +90,7 @@ MasterDB 按 [ipr-master-diff 说明](https://github.com/MalitsPlus/ipr-master-d
 媒体与文本按内容去重，批量检查 R2 对象清单。全部上传并校验成功后切换 `current.json`；失败时保留上一版本。
 
 - 保留并备份 `/runtime` 持久卷，升级不执行 `down -v`。同一 R2 前缀只运行一个更新器。
+- 本地 `releases/` 在发布成功或确认无更新后自动清理，仅保留当前及上一个发布版本；失败时保留重试目录。资源缓存、文本仓库和最近五份增量包不受影响。
 - 清理 R2 时保留 `current.json` 指向的 `releases/<release>/` 及其引用的 `text/`、`media/` 对象。其他版本是否保留取决于回滚和已打开页面的需要；这些对象不会自动清理。
 - 不给 `current.json` 设置永久缓存，也不要对整个 R2 前缀设置自动删除规则。
 - 网站代码更新需部署 Worker；资源和索引由 Docker 更新器发布。

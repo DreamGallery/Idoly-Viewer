@@ -194,6 +194,43 @@ def fingerprint(inputs):
     return hashlib.sha256(json.dumps([inputs,recipe.hexdigest()],sort_keys=True).encode()).hexdigest()
 
 
+def cleanup_local_releases(root,current):
+    """Keep the published baseline and its predecessor; never touch shared caches."""
+    releases=root/'releases'
+    valid_name=lambda name:isinstance(name,str) and re.fullmatch(r'idoly-r\d+-[a-f0-9]{16}',name)
+    try:
+        if releases.is_symlink() or not valid_name(current):
+            raise ValueError('Unsafe releases directory or current release')
+        active=releases/current
+        if active.is_symlink() or (active/'complete.json').is_symlink():
+            raise ValueError('Published baseline is a symlink')
+        metadata=load(active/'complete.json')
+        if not isinstance(metadata,dict) or 'base_release' not in metadata:
+            raise ValueError('Published baseline metadata is missing')
+        previous=metadata['base_release']
+        if previous is not None and not valid_name(previous):
+            raise ValueError('Invalid previous release')
+        retained={current,previous}
+        obsolete=sorted(path for path in releases.iterdir()
+                        if valid_name(path.name) and path.name not in retained
+                        and not path.is_symlink() and path.is_dir() and not path.is_mount())
+    except (OSError,ValueError) as error:
+        print(f'Updater: local release cleanup deferred ({type(error).__name__})',flush=True)
+        return
+    if not obsolete:return
+    removed=failed=0
+    print('Updater: local release cleanup: keeping '+', '.join(sorted(retained-{None})),flush=True)
+    for number,path in enumerate(obsolete,1):
+        print(f'Updater: local release cleanup: removing {number}/{len(obsolete)} {path.name}',flush=True)
+        try:
+            shutil.rmtree(path)
+            removed+=1
+        except OSError as error:
+            failed+=1
+            print(f'Updater: local release cleanup deferred for {path.name} ({type(error).__name__})',flush=True)
+    print(f'Updater: local release cleanup: removed={removed} deferred={failed}',flush=True)
+
+
 def run_once(root,env=os.environ,prepare_only=False):
     root.mkdir(parents=True,exist_ok=True)
     token=env.get('IDOLY_GITHUB_TOKEN','')
@@ -219,6 +256,7 @@ def run_once(root,env=os.environ,prepare_only=False):
     identity=fingerprint(inputs)
     if previous and load(previous/'complete.json')['fingerprint']==identity:
         print('Updater: inputs unchanged; retaining current release',flush=True)
+        cleanup_local_releases(root,previous.name)
         return
     release=f'idoly-r{manifest["revision"]}-{identity[:16]}'
     stage=root/'releases'/release
@@ -239,6 +277,7 @@ def run_once(root,env=os.environ,prepare_only=False):
         print('Updater: complete local snapshot prepared; no R2 upload: '+release,flush=True);return
     publish(s3,bucket,prefix,stage,versions,etag,root/'downloads',max(1,min(8,int(env.get('IDOLY_UPLOAD_WORKERS','4')))),public_base=public_base)
     save(root/'last-success.json',{'release':release,'fingerprint':identity,'at':int(time.time())})
+    cleanup_local_releases(root,release)
     # Delete only archives previously recorded by this updater, after publication.
     retained={v['filename'] for v in versions['versions']}
     for old in (remote or {}).get('versions',{}).get('versions',[]):

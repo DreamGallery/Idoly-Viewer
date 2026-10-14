@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Cake, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
+import birthdayCake from './assets/birthday-cake.svg';
 import { attributeOptions, roleOptions, defaultCardFilters, type CardFilters } from './card-filters';
 import type { Catalog } from './idoly-types';
 import type { Directory } from './StoryDirectory';
@@ -45,7 +46,7 @@ export default function CharacterFilter({ data, directory, group, character, onG
    <div className="card-trait-options" role="group" aria-label="特殊卡牌">
     <span className="card-trait-label">特殊</span>
     <button className="card-trait-icon" aria-label="可觉醒卡牌" aria-pressed={cardFilters.special==='evolution'} onClick={()=>onCardFiltersChange({...cardFilters,special:cardFilters.special==='evolution'?'all':'evolution'})}><img className="game-filter-image" src={imageUrl('/images/card-filters/icon_after_evolution.png')} alt=""/></button>
-    <button className="card-trait-icon" aria-label="生日卡牌" aria-pressed={cardFilters.special==='birthday'} onClick={()=>onCardFiltersChange({...cardFilters,special:cardFilters.special==='birthday'?'all':'birthday'})}><Cake strokeWidth={1.6} aria-hidden="true"/></button>
+    <button className="card-trait-icon" aria-label="生日卡牌" aria-pressed={cardFilters.special==='birthday'} onClick={()=>onCardFiltersChange({...cardFilters,special:cardFilters.special==='birthday'?'all':'birthday'})}><img className="game-filter-image" src={birthdayCake} alt=""/></button>
    </div>
    {active&&<button className="card-trait-reset" onClick={()=>onCardFiltersChange(defaultCardFilters)}>重置卡牌筛选</button>}
   </div>
