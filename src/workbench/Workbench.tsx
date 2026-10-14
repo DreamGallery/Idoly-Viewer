@@ -19,6 +19,8 @@ import {buildVoiceMap} from './voice-map';
 
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 const taskTimestamp = (value?: string) => Date.parse(value || '') || 0;
+type EditorRowFilter = { query: string; onlyEmpty: boolean; indices: ReadonlySet<number> | null };
+const allEditorRows: EditorRowFilter = { query: '', onlyEmpty: false, indices: null };
 const publishedDate = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 function download(text: string, name: string) {
   const url = URL.createObjectURL(new Blob(['\uFEFF', text], { type: 'text/csv;charset=utf-8' }));
@@ -182,7 +184,9 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
   const readerIdentity = canCollaborate ? 'github:' + auth.user!.login.toLowerCase() : 'original';
   const [documentOwner, setDocumentOwner] = useState<string | null>(null);
   const visibleDoc = documentOwner === readerIdentity ? doc : null;
-  const [notice, setNotice] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [role, setRole] = useState<TrackKey>('tr'), [search, setSearch] = useState(''), [onlyEmpty, setOnlyEmpty] = useState(false), [changed, setChanged] = useState(false);
+  const [notice, setNotice] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [role, setRole] = useState<TrackKey>('tr'), [search, setSearch] = useState(''), [changed, setChanged] = useState(false);
+  const [rowFilter, setRowFilter] = useState<EditorRowFilter>(allEditorRows);
+  const searchComposing = useRef(false);
   const [revising, setRevising] = useState(false), [remoteReady, setRemoteReady] = useState(false), [remoteLabel, setRemoteLabel] = useState('原文'), [draftAvailable, setDraftAvailable] = useState<string | null>(null);
   const wrapper = useRef<Github | null>(null), baseRevision = useRef<Record<TrackKey, number>>({ tr: 0, pr: 0 });
   // Keep personal browser edits separate from drafts loaded with repository access.
@@ -202,6 +206,7 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     let active = true;
     const generation = ++sourceGeneration.current;
     setDoc(null); setDocumentOwner(null); setChanged(false); setRemoteReady(false); setDraftLoaded(false);
+    setSearch(''); setRowFilter(allEditorRows);
     setRemoteLabel('原文');
     setTask(null); setSourceReview(null); setSourceConfirmed(false); setNotice(''); setError(''); setDraftAvailable(null);
     wrapper.current = null; source.current = null;
@@ -249,7 +254,7 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     }
     const nextDoc = doc?.sourceHash === parsedSource.sourceHash ? mergeTranslation(parsedSource, toCsvText(doc), false) : parsedSource;
     source.current = parsedSource; setSourceHash(currentSource.sha256); setDoc(nextDoc); setDocumentOwner(readerIdentity); latestDoc.current = nextDoc;
-    if (doc?.sourceHash !== parsedSource.sourceHash) setChanged(false);
+    if (doc?.sourceHash !== parsedSource.sourceHash) { setChanged(false); setSearch(''); setRowFilter(allEditorRows); }
     found.aiPath = 'story/ai/'+currentSource.path; sourcePath.current = found.aiPath;
     found.translatedPath = completionPath(found.aiPath, scriptId, 'tr');
     found.proofreadPath = completionPath(found.aiPath, scriptId, 'pr');
@@ -340,7 +345,14 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     setDoc(current => current && ({ ...current, data: current.data.map((row, i) => i === index ? { ...row, trans } : row) }));
     setChanged(true); setNotice('');
   }, []);
-  const rows = visibleDoc?.data.map((row, i) => ({ row, i })).filter(({ row }) => (!onlyEmpty || !row.trans.trim()) && (!search || [row.name, row.text, row.trans].some(t => t.includes(search))));
+  function applySearch(query = search, onlyEmpty = rowFilter.onlyEmpty) {
+    query = query.trim();
+    // Freeze matching rows until the next explicit search, so editing cannot hide the active textarea.
+    const indices = query || onlyEmpty ? new Set(visibleDoc?.data.flatMap((row, i) =>
+      (!onlyEmpty || !row.trans.trim()) && (!query || [row.name, row.text, row.trans].some(text => text.includes(query))) ? [i] : [])) : null;
+    setRowFilter({ query, onlyEmpty, indices });
+  }
+  const rows = visibleDoc?.data.flatMap((row, i) => rowFilter.indices === null || rowFilter.indices.has(i) ? [{ row, i }] : []);
   return <section className="work-editor" aria-label="剧情翻译编辑器"><header><h2>剧情文本</h2><Login auth={auth} refresh={refreshAuth} /></header>
     <div className="work-toolbar">{auth?.local&&<p className="local-notice">本地协作测试 · 所有提交保存在本机</p>}<span>{remoteLabel} · {visibleDoc?.data.filter(r => r.trans.trim()).length || 0} / {visibleDoc?.data.length || 0}</span><button disabled={!visibleDoc} onClick={() => run(async()=>{if(visibleDoc){const errors=validateRowsHtmlTags(visibleDoc.data);if(errors.length)throw new Error(errors.join('；'));download(toCsvText(visibleDoc),scriptId+'.csv')}})}>导出 CSV</button><label className="work-button">导入 CSV<input type="file" accept=".csv,text/csv" hidden disabled={!visibleDoc || busy} onChange={e => { const file = e.target.files?.[0]; if (file) run(() => importCsv(file)); e.target.value = ''; }} /></label><button disabled={!visibleDoc || busy} onClick={() => run(async () => { if (visibleDoc) { downloadFile(await exportTxt(scriptId, toCsvText(visibleDoc), remoteReady), scriptId + '.txt'); setNotice('TXT 已导出；未翻译的台词保留原文'); } })}>导出 TXT</button>{visibleDoc && draftAvailable && <button onClick={() => download(draftAvailable, scriptId + '-旧草稿.csv')}>下载旧草稿</button>}</div>
     {auth?.canCollaborate && <div className="work-collaboration"><div className="work-toolbar"><select aria-label="协作工序" value={role} disabled={busy} onChange={e => { setRole(e.target.value as TrackKey); setRevising(false); setRemoteReady(false); setDraftLoaded(false); }}><option value="tr">翻译</option><option value="pr">校对</option></select>{remoteReady && task && <><button disabled={busy || !auth?.user || task[role].state !== '待认领'} onClick={() => run(claim)}>认领{role === 'tr' ? '翻译' : '校对'}</button>{task[role].state === '完成' && !revising && <button disabled={busy || !auth?.user} onClick={() => setRevising(true)}>修订{role === 'tr' ? '翻译' : '校对'}</button>}</>}<button disabled={busy || remoteReady} onClick={() => run(connect)}>{remoteReady ? '已连接任务' : '连接协作任务'}</button>{task && !auth?.local && <a href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/issues/${task.number}`} target="_blank" rel="noreferrer">任务 #{task.number}</a>}</div>
@@ -348,7 +360,20 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     </div>}{error && <p className="work-error" role="alert">{error}</p>}{notice && <p className="work-notice" role="status">{notice}</p>}{busy && <p role="status">正在处理…</p>}
     {voices?.source_sha256 && sourceHash && voices.source_sha256 !== sourceHash && <p className="work-notice">原文版本与语音索引不一致，请更新索引后播放。</p>}
     {canCollaborate && sourceReview && <div className="work-notice"><p>原文已更新，请核对保留的译文。{sourceReview.archives.map((path,i) => <a key={path} href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/blob/${WORK_BRANCH}/${path}`} target="_blank" rel="noreferrer"> 旧稿 {i+1}</a>)}</p><label><input type="checkbox" checked={sourceConfirmed} onChange={e => setSourceConfirmed(e.target.checked)} /> 已核对当前原文及迁移译文</label></div>}
-    {visibleDoc ? <><div className="work-toolbar"><input aria-label="搜索台词" placeholder="搜索角色或台词" value={search} onChange={e => setSearch(e.target.value)} /><button aria-pressed={onlyEmpty} onClick={() => setOnlyEmpty(!onlyEmpty)}>只看未翻译</button><span>{canCollaborate && remoteReady && draftLoaded ? '编辑自动保存到此浏览器；手动保存才提交到 GitHub' : '编辑自动保存到此浏览器'}</span></div><div className="work-rows">{rows?.map(({ row, i }) => <TranslationRow key={i} row={row} index={i} clips={voiceMap.get(i)?.clips} disabled={busy} onChange={editRow} onPlay={playVoice} />)}</div></> : !error && <p>正在读取原文…</p>}
+    {visibleDoc ? <><div className="work-toolbar">
+      <form className="work-editor-search" role="search" onSubmit={event => { event.preventDefault(); if (!searchComposing.current) applySearch(); }}>
+        <input type="search" enterKeyHint="search" aria-label="搜索台词" placeholder="搜索角色、原文或译文" value={search}
+          onChange={event => setSearch(event.target.value)}
+          onCompositionStart={() => { searchComposing.current = true; }}
+          onCompositionEnd={() => { searchComposing.current = false; }}
+          onKeyDown={event => {
+            // Safari may end composition before the confirming Enter; keyCode 229 still identifies it.
+            if (event.key === 'Enter' && (searchComposing.current || event.nativeEvent.isComposing || event.keyCode === 229)) event.preventDefault();
+          }} />
+      </form>
+      <button aria-pressed={rowFilter.onlyEmpty} onClick={() => applySearch(rowFilter.query, !rowFilter.onlyEmpty)}>只看未翻译</button>
+      <span>编辑自动保存到此浏览器；上传需点击「保存 GitHub 草稿」</span>
+    </div><div className="work-rows">{rows?.map(({ row, i }) => <TranslationRow key={i} row={row} index={i} clips={voiceMap.get(i)?.clips} disabled={busy} onChange={editRow} onPlay={playVoice} />)}</div></> : !error && <p>正在读取原文…</p>}
     {visibleDoc && canCollaborate && <footer className="work-editor-actions">{remoteReady && task && <div className="work-toolbar"><button disabled={busy || active?.activeRole !== role} onClick={() => run(() => submit(false))}>{auth?.local?'保存本地协作草稿':'保存 GitHub 草稿'}</button><button className="work-primary" disabled={busy || active?.activeRole !== role} onClick={() => run(() => submit(true))}>完成{role === 'tr' ? '翻译' : '校对'}</button></div>}
 {error && <p className="work-error" role="alert">{error}</p>}{busy && <p role="status">正在处理…</p>}</footer>}
   </section>;
