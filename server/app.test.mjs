@@ -58,6 +58,36 @@ test('atomic Git commit uses non-force ref update',async t=>{const f=await fixtu
  });const r=await f.post('/api/github/commit',{files:[{path:'records/test.json',content:'dGVzdA==',expectedSha:'old'}]});assert.equal(r.status,200);assert.deepEqual(await r.json(),{sha:'commit',files:[{path:'records/test.json',sha:'blob'}]});});
 test('issue change prevents stale status update',async t=>{const f=await fixture(t,async()=>Response.json({updated_at:'new',body:'other claim'}));const r=await f.post('/api/github/issue',{number:1,expectedUpdatedAt:'old',expectedBody:'',body:'',state:'open'});assert.equal(r.status,409);});
 
+test('identical files and absent deletions return the current head without a Git commit',async t=>{
+ const f=await fixture(t,async url=>{
+  if(url.includes('/git/ref/'))return Response.json({object:{sha:'head'}});
+  if(url.includes('/contents/records/test.json'))return Response.json({sha:'same'});
+  if(url.includes('/contents/records/missing.json'))return Response.json({}, {status:404});
+  if(url.endsWith('/git/blobs'))return Response.json({sha:'same'});
+  throw new Error('No tree, commit or branch update should be created');
+ });
+ const result=await f.post('/api/github/commit',{files:[{path:'records/test.json',content:'e30=',expectedSha:'same'},{path:'records/missing.json',content:null,expectedSha:null}]});
+ assert.equal(result.status,200);
+ assert.deepEqual(await result.json(),{sha:'head',files:[{path:'records/test.json',sha:'same'},{path:'records/missing.json',sha:null}]});
+ assert.ok(!f.calls.some(([url,opts])=>/\/git\/(trees|commits|refs)\b/.test(url)&&opts.method!=='GET'));
+});
+
+test('mixed commits only update changed tree entries and return every file baseline',async t=>{
+ const f=await fixture(t,async(url,opts)=>{
+  if(url.includes('/git/ref/'))return Response.json({object:{sha:'head'}});
+  if(url.includes('/contents/'))return Response.json({sha:'same'});
+  if(url.endsWith('/git/blobs'))return Response.json({sha:JSON.parse(opts.body).content==='e30='?'same':'changed'});
+  if(url.endsWith('/git/commits/head'))return Response.json({tree:{sha:'oldtree'}});
+  if(url.endsWith('/git/trees')){assert.deepEqual(JSON.parse(opts.body).tree,[{path:'records/changed.json',mode:'100644',type:'blob',sha:'changed'}]);return Response.json({sha:'tree'});}
+  if(url.endsWith('/git/commits'))return Response.json({sha:'commit'});
+  if(url.includes('/git/refs/'))return Response.json({});
+  throw new Error('Unexpected request');
+ });
+ const result=await f.post('/api/github/commit',{files:[{path:'records/same.json',content:'e30=',expectedSha:'same'},{path:'records/changed.json',content:'dGVzdA==',expectedSha:'same'}]});
+ assert.equal(result.status,200);
+ assert.deepEqual(await result.json(),{sha:'commit',files:[{path:'records/same.json',sha:'same'},{path:'records/changed.json',sha:'changed'}]});
+});
+
 test('anonymous task requests are denied, including direct issue lookup',async t=>{const f=await fixture(t);for(const kind of ['issues','issue','findIssue']){const r=await f.post('/api/github/read',{kind,number:1,scriptId:'test'},{Cookie:''});assert.equal(r.status,401);}});
 test('logged-in read-only account cannot view tasks or submit changes',async t=>{const f=await fixture(t,undefined,false);const status=await(await fetch(f.base+'/api/auth/status',{headers:{Cookie:f.cookie}})).json();assert.equal(status.canCollaborate,false);for(const kind of ['issues','issue','findIssue']){assert.equal((await f.post('/api/github/read',{kind,number:1,scriptId:'test'})).status,403);}assert.equal((await f.post('/api/github/commit',{})).status,403);});
 test('writer can list tasks',async t=>{const f=await fixture(t,async()=>Response.json([{number:1,title:'test'}]));assert.equal((await f.post('/api/github/read',{kind:'issues'})).status,200);});

@@ -15,7 +15,6 @@ import { CompletionStats } from './CompletionStats';
 import { TranslationInput } from './TranslationInput';
 import {validateTranslation} from './idoly-script';
 import './workbench.css';
-import {DraftAutosave} from './autosave';
 import {buildVoiceMap} from './voice-map';
 
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
@@ -189,10 +188,9 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
   // Keep personal browser edits separate from drafts loaded with repository access.
   const storageKey = `${canCollaborate ? 'idoly-draft-v1' : 'idoly-local-draft-v1'}:${scriptId}`;
   const source = useRef<CsvTextInfo | null>(null), sourcePath = useRef(''), sourceGeneration = useRef(0);
-  const latestDoc = useRef(doc), autosave = useRef<DraftAutosave | null>(null), savingRef = useRef(false);
-  const [saving, setSaving] = useState(false), [draftLoaded, setDraftLoaded] = useState(false), [sourceConfirmed, setSourceConfirmed] = useState(false);
+  const latestDoc = useRef(doc), busyRef = useRef(false);
+  const [draftLoaded, setDraftLoaded] = useState(false), [sourceConfirmed, setSourceConfirmed] = useState(false);
   const [sourceReview, setSourceReview] = useState<{hash:string; archives:string[]} | null>(null);
-  const submitRef = useRef<(csv:string)=>Promise<void>>(async () => {});
   useEffect(() => { latestDoc.current = doc; }, [doc]);
   const refreshAuth = () => { api<Auth>('auth/status').then(setAuth).catch(e => setError(message(e))); };
   useEffect(() => {
@@ -232,7 +230,7 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     try { localStorage.setItem(storageKey, JSON.stringify({ sha256: sourceHash, csv: draftCsv, savedAt: Date.now() })); } catch { setError('浏览器草稿保存失败，请导出 CSV 备份'); }
   }, [draftCsv,sourceHash,storageKey]);
   useEffect(() => { if (!changed) return; const leave = (e: BeforeUnloadEvent) => { e.preventDefault(); }; window.addEventListener('beforeunload', leave); return () => window.removeEventListener('beforeunload', leave); }, [changed]);
-  async function run(action: () => Promise<void>) { if (savingRef.current) return; setBusy(true); setError(''); try { await action(); } catch (e) { setError(message(e)); } finally { setBusy(false); } }
+  async function run(action: () => Promise<void>) { if (busyRef.current) return; busyRef.current = true; setBusy(true); setError(''); try { await action(); } catch (e) { setError(message(e)); } finally { busyRef.current = false; setBusy(false); } }
   async function connect() {
     if (!auth?.canCollaborate) throw new Error('登录并拥有工作仓库写权限后才能连接任务');
     if (auth.work.owner !== WORK_OWNER || auth.work.repo !== WORK_REPO || auth.work.branch !== WORK_BRANCH) throw new Error('前后端工作仓库配置不一致');
@@ -267,7 +265,7 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
       for (const path of paths) if (path) try { await w.getContent(WORK_OWNER, WORK_REPO, WORK_BRANCH, path); } catch (e) { if ((e as { response?: { status: number } }).response?.status !== 404) throw e; }
     }
     if (generation !== sourceGeneration.current) return;
-    wrapper.current = w; setTask(found); setRemoteReady(true); setNotice(draftInfoOf(record, role, auth.user?.login || '') ? '已连接任务。请先恢复远端草稿，核对后继续编辑。' : '已连接任务，认领后编辑会自动保存到协作分支。');
+    wrapper.current = w; setTask(found); setRemoteReady(true); setNotice(draftInfoOf(record, role, auth.user?.login || '') ? '已连接任务。请先恢复远端草稿，核对后继续编辑。' : '已连接任务，认领后可手动保存草稿或完成工序。');
   }
   async function loadStage(stage: 'ai' | 'translated' | 'proofread' | 'draft') {
     if (!canCollaborate || !task || !wrapper.current || !source.current) return;
@@ -299,7 +297,7 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     if (!currentSource) return;
     const csv = await file.text();
     if (generation !== sourceGeneration.current) return;
-    setDoc(mergeTranslation(currentSource, csv)); setChanged(true); setRemoteLabel('导入译文');
+    setDoc(mergeTranslation(currentSource, csv)); setChanged(true); setNotice(''); setRemoteLabel('导入译文');
   }
   async function freshTask() {
     if (!wrapper.current || !task || !auth?.user) throw new Error('请登录并连接任务');
@@ -315,56 +313,43 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     try { await syncRecordTracks(wrapper.current!, scriptId, claimed.tr, claimed.pr); } catch (e) { throw new Error('任务已认领，但记录同步失败：' + message(e)); }
     setNotice('已认领' + (role === 'tr' ? '翻译' : '校对'));
   }
-  async function submit(complete: boolean, snapshot?: string) {
+  async function submit(complete: boolean) {
     if (!doc || !wrapper.current) return;
     if (!draftLoaded) throw new Error('请先恢复远端草稿，避免覆盖尚未发布的译文');
-    const savedCsv = snapshot || toCsvText(doc), submitted = extractInfoFromCsvText(savedCsv);
+    const savedCsv = toCsvText(doc), submitted = extractInfoFromCsvText(savedCsv);
     const fresh = await freshTask(); const status = myStatusOf(fresh.tr, fresh.pr, auth!.user!.login, revising ? role : undefined);
     if (status.activeRole !== role) throw new Error(status.blockMsg || '请先认领此工序');
     if (complete) { if (sourceReview && !sourceConfirmed) throw new Error('请先核对原文变化并勾选确认'); if (submitted.data.some(r => !r.trans.trim())) throw new Error('还有未翻译的文本，请填写后再完成'); const errors = validateRowsHtmlTags(submitted.data); if (errors.length) throw new Error('译文检查未通过：' + errors.join('；')); }
     const opts = { fileId: scriptId, role, sourcePath: sourcePath.current || fresh.aiPath, contentB64: encode(savedCsv), operatorGithub: auth!.user!.login };
     if (complete) {
       const result = await completeStage(wrapper.current, { ...opts, baseRevision: baseRevision.current[role], confirmSource: sourceConfirmed });
-      try { await applyTrack(wrapper.current, fresh.number, role, { user: auth!.user!.login, state: '完成' }); }
-      catch (e) { setRemoteReady(false); throw new Error(`正式稿已保存（${result.commitSha.slice(0, 7)}），但任务状态同步失败：${message(e)}。请在 GitHub 修正状态，避免重复提交。`); }
-      setTask({ ...fresh, [role]: { user: auth!.user!.login, state: '完成' } }); setNotice(auth?.local?'本地正式稿已保存，对应工序已标记为完成':'正式稿已保存到 GitHub，对应工序已标记为完成'); setRemoteReady(false);
-    } else { await saveDraft(wrapper.current, opts); setNotice(auth?.local?'已保存到本地协作草稿':'已保存到 GitHub 草稿；正式稿和任务完成状态未修改'); }
+      try {
+        if (fresh[role].state !== '完成' || !sameWorkUser(fresh[role].user, auth!.user!.login)) await applyTrack(wrapper.current, fresh.number, role, { user: auth!.user!.login, state: '完成' });
+      } catch (e) { setRemoteReady(false); throw new Error(`正式稿已保存${result.commitSha ? `（${result.commitSha.slice(0, 7)}）` : ''}，但任务状态同步失败：${message(e)}。请重新连接任务后重试。`); }
+      setTask({ ...fresh, [role]: { user: auth!.user!.login, state: '完成' } }); setNotice(result.changed ? (auth?.local?'本地正式稿已保存，对应工序已标记为完成':'正式稿已保存到 GitHub，对应工序已标记为完成') : '正式稿内容未变化，无需提交；对应工序已完成'); setRemoteReady(false);
+    } else {
+      const result = await saveDraft(wrapper.current, opts);
+      setNotice(result.changed ? (auth?.local?'已保存到本地协作草稿':'已保存到 GitHub 草稿；正式稿和任务完成状态未修改') : '草稿内容未变化，无需提交');
+    }
     if (latestDoc.current && toCsvText(latestDoc.current) === savedCsv) setChanged(false);
   }
-  useEffect(() => { submitRef.current = csv => submit(false, csv); });
-  useEffect(() => {
-    if (!canCollaborate || !remoteReady || !draftLoaded || busy) return;
-    const queue = new DraftAutosave(async csv => {
-      savingRef.current = true; setSaving(true);
-      try { await submitRef.current(csv); }
-      finally { savingRef.current = false; setSaving(false); }
-    }, (_csv, failure) => {
-      if (failure) { setError('自动保存暂停：'+message(failure)+'。编辑仍保存在浏览器，请重新连接任务后处理。'); setRemoteReady(false); }
-    });
-    autosave.current = queue;
-    return () => { queue.stop(); if (autosave.current === queue) autosave.current = null; };
-  }, [canCollaborate, remoteReady, draftLoaded, busy, role, scriptId, auth?.user?.login]);
   const active = task && auth?.user ? myStatusOf(task.tr, task.pr, auth.user.login, revising ? role : undefined) : null;
-  useEffect(() => {
-    if (draftCsv !== null && remoteReady && draftLoaded && !busy && active?.activeRole === role) autosave.current?.update(draftCsv);
-  }, [draftCsv, remoteReady, draftLoaded, busy, active?.activeRole, role]);
-  const working = busy || saving;
   const currentSource = source.current;
   const voiceMap = useMemo(() => buildVoiceMap(currentSource, sourceHash, voices, idolyVoices), [currentSource,sourceHash,voices,idolyVoices]);
   const editRow = useCallback((index: number, trans: string) => {
     setDoc(current => current && ({ ...current, data: current.data.map((row, i) => i === index ? { ...row, trans } : row) }));
-    setChanged(true);
+    setChanged(true); setNotice('');
   }, []);
   const rows = visibleDoc?.data.map((row, i) => ({ row, i })).filter(({ row }) => (!onlyEmpty || !row.trans.trim()) && (!search || [row.name, row.text, row.trans].some(t => t.includes(search))));
   return <section className="work-editor" aria-label="剧情翻译编辑器"><header><h2>剧情文本</h2><Login auth={auth} refresh={refreshAuth} /></header>
-    <div className="work-toolbar">{auth?.local&&<p className="local-notice">本地协作测试 · 所有提交保存在本机</p>}<span>{remoteLabel} · {visibleDoc?.data.filter(r => r.trans.trim()).length || 0} / {visibleDoc?.data.length || 0}</span><button disabled={!visibleDoc} onClick={() => run(async()=>{if(visibleDoc){const errors=validateRowsHtmlTags(visibleDoc.data);if(errors.length)throw new Error(errors.join('；'));download(toCsvText(visibleDoc),scriptId+'.csv')}})}>导出 CSV</button><label className="work-button">导入 CSV<input type="file" accept=".csv,text/csv" hidden disabled={!visibleDoc || working} onChange={e => { const file = e.target.files?.[0]; if (file) run(() => importCsv(file)); e.target.value = ''; }} /></label><button disabled={!visibleDoc || working} onClick={() => run(async () => { if (visibleDoc) { downloadFile(await exportTxt(scriptId, toCsvText(visibleDoc), remoteReady), scriptId + '.txt'); setNotice('TXT 已导出；未翻译的台词保留原文'); } })}>导出 TXT</button>{visibleDoc && draftAvailable && <button onClick={() => download(draftAvailable, scriptId + '-旧草稿.csv')}>下载旧草稿</button>}</div>
-    {auth?.canCollaborate && <div className="work-collaboration"><div className="work-toolbar"><select aria-label="协作工序" value={role} disabled={working} onChange={e => { setRole(e.target.value as TrackKey); setRevising(false); setRemoteReady(false); setDraftLoaded(false); }}><option value="tr">翻译</option><option value="pr">校对</option></select>{remoteReady && task && <><button disabled={working || !auth?.user || task[role].state !== '待认领'} onClick={() => run(claim)}>认领{role === 'tr' ? '翻译' : '校对'}</button>{task[role].state === '完成' && !revising && <button disabled={working || !auth?.user} onClick={() => setRevising(true)}>修订{role === 'tr' ? '翻译' : '校对'}</button>}</>}<button disabled={working || remoteReady} onClick={() => run(connect)}>{remoteReady ? '已连接任务' : '连接协作任务'}</button>{task && !auth?.local && <a href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/issues/${task.number}`} target="_blank" rel="noreferrer">任务 #{task.number}</a>}</div>
-    {remoteReady && task && <><p>翻译：{task.tr.state} {task.tr.user.trim() || '—'} / 校对：{task.pr.state} {task.pr.user.trim() || '—'}</p><div className="work-toolbar">{(['ai', 'translated', 'proofread', 'draft'] as const).map((s, i) => <button disabled={working} key={s} onClick={() => run(() => loadStage(s))}>{['载入机器译文', '载入翻译稿', '载入校对稿', '恢复远端草稿'][i]}</button>)}</div>{active?.blocked && <p>{active.blockMsg}</p>}</>}
-    </div>}{error && <p className="work-error" role="alert">{error}</p>}{notice && <p className="work-notice" role="status">{notice}</p>}{working && <p role="status">{saving ? '正在保存到协作分支…' : '正在处理…'}</p>}
+    <div className="work-toolbar">{auth?.local&&<p className="local-notice">本地协作测试 · 所有提交保存在本机</p>}<span>{remoteLabel} · {visibleDoc?.data.filter(r => r.trans.trim()).length || 0} / {visibleDoc?.data.length || 0}</span><button disabled={!visibleDoc} onClick={() => run(async()=>{if(visibleDoc){const errors=validateRowsHtmlTags(visibleDoc.data);if(errors.length)throw new Error(errors.join('；'));download(toCsvText(visibleDoc),scriptId+'.csv')}})}>导出 CSV</button><label className="work-button">导入 CSV<input type="file" accept=".csv,text/csv" hidden disabled={!visibleDoc || busy} onChange={e => { const file = e.target.files?.[0]; if (file) run(() => importCsv(file)); e.target.value = ''; }} /></label><button disabled={!visibleDoc || busy} onClick={() => run(async () => { if (visibleDoc) { downloadFile(await exportTxt(scriptId, toCsvText(visibleDoc), remoteReady), scriptId + '.txt'); setNotice('TXT 已导出；未翻译的台词保留原文'); } })}>导出 TXT</button>{visibleDoc && draftAvailable && <button onClick={() => download(draftAvailable, scriptId + '-旧草稿.csv')}>下载旧草稿</button>}</div>
+    {auth?.canCollaborate && <div className="work-collaboration"><div className="work-toolbar"><select aria-label="协作工序" value={role} disabled={busy} onChange={e => { setRole(e.target.value as TrackKey); setRevising(false); setRemoteReady(false); setDraftLoaded(false); }}><option value="tr">翻译</option><option value="pr">校对</option></select>{remoteReady && task && <><button disabled={busy || !auth?.user || task[role].state !== '待认领'} onClick={() => run(claim)}>认领{role === 'tr' ? '翻译' : '校对'}</button>{task[role].state === '完成' && !revising && <button disabled={busy || !auth?.user} onClick={() => setRevising(true)}>修订{role === 'tr' ? '翻译' : '校对'}</button>}</>}<button disabled={busy || remoteReady} onClick={() => run(connect)}>{remoteReady ? '已连接任务' : '连接协作任务'}</button>{task && !auth?.local && <a href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/issues/${task.number}`} target="_blank" rel="noreferrer">任务 #{task.number}</a>}</div>
+    {remoteReady && task && <><p>翻译：{task.tr.state} {task.tr.user.trim() || '—'} / 校对：{task.pr.state} {task.pr.user.trim() || '—'}</p><div className="work-toolbar">{(['ai', 'translated', 'proofread', 'draft'] as const).map((s, i) => <button disabled={busy} key={s} onClick={() => run(() => loadStage(s))}>{['载入机器译文', '载入翻译稿', '载入校对稿', '恢复远端草稿'][i]}</button>)}</div>{active?.blocked && <p>{active.blockMsg}</p>}</>}
+    </div>}{error && <p className="work-error" role="alert">{error}</p>}{notice && <p className="work-notice" role="status">{notice}</p>}{busy && <p role="status">正在处理…</p>}
     {voices?.source_sha256 && sourceHash && voices.source_sha256 !== sourceHash && <p className="work-notice">原文版本与语音索引不一致，请更新索引后播放。</p>}
     {canCollaborate && sourceReview && <div className="work-notice"><p>原文已更新，请核对保留的译文。{sourceReview.archives.map((path,i) => <a key={path} href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/blob/${WORK_BRANCH}/${path}`} target="_blank" rel="noreferrer"> 旧稿 {i+1}</a>)}</p><label><input type="checkbox" checked={sourceConfirmed} onChange={e => setSourceConfirmed(e.target.checked)} /> 已核对当前原文及迁移译文</label></div>}
-    {visibleDoc ? <><div className="work-toolbar"><input aria-label="搜索台词" placeholder="搜索角色或台词" value={search} onChange={e => setSearch(e.target.value)} /><button aria-pressed={onlyEmpty} onClick={() => setOnlyEmpty(!onlyEmpty)}>只看未翻译</button><span>{canCollaborate && remoteReady && draftLoaded ? '编辑自动保存到协作分支，浏览器保留备份' : '编辑自动保存到此浏览器'}</span></div><div className="work-rows">{rows?.map(({ row, i }) => <TranslationRow key={i} row={row} index={i} clips={voiceMap.get(i)?.clips} disabled={busy} onChange={editRow} onPlay={playVoice} />)}</div></> : !error && <p>正在读取原文…</p>}
-    {visibleDoc && canCollaborate && <footer className="work-editor-actions">{remoteReady && task && <div className="work-toolbar"><button disabled={working || active?.activeRole !== role} onClick={() => run(() => submit(false))}>{auth?.local?'保存本地协作草稿':'保存 GitHub 草稿'}</button><button className="work-primary" disabled={working || active?.activeRole !== role} onClick={() => run(() => submit(true))}>完成{role === 'tr' ? '翻译' : '校对'}</button></div>}
-{error && <p className="work-error" role="alert">{error}</p>}{working && <p role="status">{saving ? '正在保存到协作分支…' : '正在处理…'}</p>}</footer>}
+    {visibleDoc ? <><div className="work-toolbar"><input aria-label="搜索台词" placeholder="搜索角色或台词" value={search} onChange={e => setSearch(e.target.value)} /><button aria-pressed={onlyEmpty} onClick={() => setOnlyEmpty(!onlyEmpty)}>只看未翻译</button><span>{canCollaborate && remoteReady && draftLoaded ? '编辑自动保存到此浏览器；手动保存才提交到 GitHub' : '编辑自动保存到此浏览器'}</span></div><div className="work-rows">{rows?.map(({ row, i }) => <TranslationRow key={i} row={row} index={i} clips={voiceMap.get(i)?.clips} disabled={busy} onChange={editRow} onPlay={playVoice} />)}</div></> : !error && <p>正在读取原文…</p>}
+    {visibleDoc && canCollaborate && <footer className="work-editor-actions">{remoteReady && task && <div className="work-toolbar"><button disabled={busy || active?.activeRole !== role} onClick={() => run(() => submit(false))}>{auth?.local?'保存本地协作草稿':'保存 GitHub 草稿'}</button><button className="work-primary" disabled={busy || active?.activeRole !== role} onClick={() => run(() => submit(true))}>完成{role === 'tr' ? '翻译' : '校对'}</button></div>}
+{error && <p className="work-error" role="alert">{error}</p>}{busy && <p role="status">正在处理…</p>}</footer>}
   </section>;
 }

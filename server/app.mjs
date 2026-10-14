@@ -152,7 +152,7 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
         if (!/^adv_[\w-]+$/.test(id)) throw fail(400, '无效章节');
         if (!useWorkSources) {
           if (!services.sourceCsv) throw fail(503, '未配置协作原文');
-          const value = await services.sourceCsv(id), csv = typeof value === 'string' ? value : value.csv;
+          const value = await services.sourceCsv(id), csv = originalCsv(typeof value === 'string' ? value : value.csv);
           return json({csv, sha256:createHash('sha256').update(csv).digest('hex'), path:await services.sourcePath(id), label:value.label || '本地协作原文'});
         }
         return json(await workSources.source(session, await workHead(session), id));
@@ -293,19 +293,20 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
           }
         }
         for (const f of input.files) if (await shaAt(session, f.path, head) !== f.expectedSha) throw fail(409, `远端 ${f.path} 已更新，请导出本地草稿并重新加载`);
-        const commit = await gh(session, 'GET', `git/commits/${head}`);
-        const tree = [];
+        const tree = [], files = [];
         for (const f of input.files) {
-          if (f.content === null && f.expectedSha === null) continue;
           const sha = f.content === null ? null : (await gh(session, 'POST', 'git/blobs', { content: f.content, encoding: 'base64' })).sha;
-          tree.push({ path: f.path, mode: '100644', type: 'blob', sha });
+          files.push({ path: f.path, sha });
+          if (sha !== f.expectedSha) tree.push({ path: f.path, mode: '100644', type: 'blob', sha });
         }
+        if (!tree.length) return json({ sha: head, files });
+        const commit = await gh(session, 'GET', `git/commits/${head}`);
         const newTree = await gh(session, 'POST', 'git/trees', { base_tree: commit.tree.sha, tree });
         const next = await gh(session, 'POST', 'git/commits', { message: String(input.message || '更新剧情翻译').slice(0, 200), tree: newTree.sha, parents: [head] });
         // force:false also rejects a concurrent push after the comparison above.
         try { await gh(session, 'PATCH', `git/refs/heads/${encodeURIComponent(branch)}`, { sha: next.sha, force: false }); }
         catch (e) { if ([409,422].includes(e.status) && attempt < 2) continue; throw e; }
-        return json({ sha: next.sha, files: tree.map(f => ({ path: f.path, sha: f.sha })) });
+        return json({ sha: next.sha, files });
         }
       }
       throw fail(404, '接口不存在');

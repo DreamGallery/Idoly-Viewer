@@ -65,7 +65,7 @@ test('Worker serves collaboration source before R2 publication and requires acce
  const response=await fetch(f.base+'/api/collaboration/source/adv_test',{headers:f.headers});
  assert.equal(response.status,200);const source=await response.json();assert.equal(source.sourceHash,sha);assert.ok(!source.csv.includes('译文'));
 });
-test('autosave retries an unrelated branch advance but never writes main',async t=>{
+test('draft save retries an unrelated branch advance but never writes main',async t=>{
  const f=await fixture(t,{race:true});const response=await f.submit(csv);
  assert.equal(response.status,200);assert.equal(f.patches(),2);
  assert.ok(f.calls.every(([url])=>!url.includes('heads/main')));

@@ -12,11 +12,101 @@ test('translator with commas and newline is escaped correctly',()=>{assert.equal
 test('stage path and proofread prerequisite retained',()=>{assert.equal(completionPath('', 'adv_dear_hski_001','tr'),'story/human/adv/dear/hski/001.csv');assert.equal(myStatusOf({user:'other',state:'进行中'},{user:'me',state:'进行中'},'me','pr').blocked,true);});
 test('unbalanced translation markup rejected',()=>assert.ok(validateRowsHtmlTags([{id:'0',text:'a',trans:'<b>a'}]).length));
 const b64=(s:string)=>Buffer.from(s).toString('base64');
-function fake(record: object) { let written: {path:string;content:string|null}[]=[];return {get written(){return written;},async getContent(_a:string,_b:string,_c:string,path:string){if(path.startsWith('records/'))return {content:b64(JSON.stringify(record))};throw {response:{status:404}};},async commitFiles(_a:string,_b:string,_c:string,_m:string,files: typeof written){written=files;return 'commit';}}; }
+function fake(record: object, initial: Record<string,string|null> = {}) {
+ let written: {path:string;content:string|null}[]=[], commits=0;
+ const contents = new Map(Object.entries(initial));
+ return {
+  get written(){return written;}, get commits(){return commits;}, contents,
+  async getContent(_a:string,_b:string,_c:string,path:string){
+   const content=contents.has(path)?contents.get(path):path.startsWith('records/')?b64(JSON.stringify(record)):null;
+   if(content!==null&&content!==undefined)return {content};
+   throw {response:{status:404}};
+  },
+  async commitFiles(_a:string,_b:string,_c:string,_m:string,files: typeof written){
+   written=files;commits++;
+   for(const file of files)contents.set(file.path,file.content);
+   return 'commit';
+  }
+ };
+}
 test('draft writes CSV and record in a single commit without completing track',async()=>{const w=fake({translation:{revision:3,state:'进行中'},artifacts:{}});await saveDraft(w,{fileId:'test',role:'tr',sourcePath:'',contentB64:b64(csv),operatorGithub:'me'});assert.equal(w.written.length,2);const record=JSON.parse(Buffer.from(w.written[1].content!,'base64').toString());assert.equal(record.translation.state,'进行中');assert.equal(record.translation.revision,3);assert.equal(record.artifacts.translation_draft.based_on_revision,3);});
 test('completion rejects stale revision before any commit',async()=>{const w=fake({translation:{revision:4},artifacts:{}});await assert.rejects(()=>completeStage(w,{fileId:'test',role:'tr',sourcePath:'',contentB64:b64(csv),operatorGithub:'me',baseRevision:3}),StaleRevisionError);assert.equal(w.written.length,0);});
 
 test('completion commits formal CSV and incremented record together',async()=>{const w=fake({translation:{revision:1,state:'进行中'},proofread:{revision:0},artifacts:{}});const result=await completeStage(w,{fileId:'test',role:'tr',sourcePath:'',contentB64:b64(csv),operatorGithub:'me',baseRevision:1});assert.equal(result.commitSha,'commit');assert.ok(w.written.some(f=>f.path==='story/human/test.csv'));const record=JSON.parse(Buffer.from(w.written.find(f=>f.path==='records/test.json')!.content!,'base64').toString());assert.equal(record.translation.revision,2);assert.equal(record.translation.state,'完成');});
+
+test('repeated manual draft saves preserve records and skip Git commits for either track',async()=>{
+ for(const role of ['tr','pr'] as const){
+  const w=fake({translation:{revision:3,state:'进行中'},proofread:{revision:2,state:'进行中'}});
+  const opts={fileId:'test',role,sourcePath:'',contentB64:b64(csv),operatorGithub:'me'};
+  const saved=await saveDraft(w,opts);
+  assert.equal(saved.changed,true);assert.equal(saved.draftRevision,1);
+  const record=w.contents.get('records/test.json');
+  const draftPath=role==='tr'?'story/drafts/translation/test.csv':'story/drafts/proofread/test.csv';
+  w.contents.set(draftPath,opts.contentB64.match(/.{1,60}/g)!.join('\r\n'));
+  const repeated=await saveDraft(w,opts);
+  assert.deepEqual(repeated,{...saved,changed:false});
+  assert.equal(w.commits,1);assert.equal(w.contents.get('records/test.json'),record);
+  const changed=await saveDraft(w,{...opts,contentB64:b64(csv.replace('second,,','second,译文,'))});
+  assert.equal(changed.changed,true);assert.equal(changed.draftRevision,2);assert.equal(w.commits,2);
+ }
+});
+
+test('identical draft still repairs missing metadata or a changed formal revision',async()=>{
+ const path='story/drafts/translation/test.csv', opts={fileId:'test',role:'tr' as const,sourcePath:'',contentB64:b64(csv),operatorGithub:'me'};
+ for(const artifact of [undefined,{path,based_on_revision:2,operator_github:'me',display_id:'me',display_source:'github'}]){
+  const w=fake({translation:{revision:3,draft_revision:1},artifacts:{translation_draft:artifact}},{[path]:b64(csv)});
+  assert.equal((await saveDraft(w,opts)).changed,true);
+  assert.equal(w.commits,1);
+  const record=JSON.parse(Buffer.from(w.contents.get('records/test.json')!,'base64').toString());
+  assert.equal(record.artifacts.translation_draft.based_on_revision,3);
+ }
+});
+
+test('draft read failures are not treated as missing files',async()=>{
+ const w=fake({}),read=w.getContent;
+ w.getContent=async(a,b,c,path)=>{if(path.startsWith('story/drafts/'))throw {response:{status:503}};return read(a,b,c,path);};
+ await assert.rejects(()=>saveDraft(w,{fileId:'test',role:'tr',sourcePath:'',contentB64:b64(csv),operatorGithub:'me'}));
+ assert.equal(w.commits,0);
+});
+
+test('repeating completion skips writes but still rejects a stale revision',async()=>{
+ const w=fake({translation:{revision:0,state:'进行中'}});
+ const opts={fileId:'test',role:'tr' as const,sourcePath:'',contentB64:b64(csv),operatorGithub:'me',baseRevision:0};
+ assert.equal((await completeStage(w,opts)).changed,true);
+ const record=w.contents.get('records/test.json');
+ assert.deepEqual(await completeStage(w,{...opts,baseRevision:1}),{changed:false,directProofread:false,commitSha:null});
+ assert.equal(w.commits,1);assert.equal(w.contents.get('records/test.json'),record);
+ await assert.rejects(()=>completeStage(w,opts),StaleRevisionError);
+ assert.equal(w.commits,1);
+});
+
+test('unchanged formal text still completes an unfinished track and confirms source changes',async()=>{
+ for(const pendingSource of [false,true]){
+  const w=fake({translation:{revision:0,state:'进行中'}});
+  await completeStage(w,{fileId:'test',role:'tr',sourcePath:'',contentB64:b64(csv),operatorGithub:'me',baseRevision:0});
+  const record=JSON.parse(Buffer.from(w.contents.get('records/test.json')!,'base64').toString());
+  if(pendingSource)record.source_change={status:'needs-confirmation',source_sha256:''};
+  else record.translation.state='进行中';
+  w.contents.set('records/test.json',b64(JSON.stringify(record)));
+  const result=await completeStage(w,{fileId:'test',role:'tr',sourcePath:'',contentB64:b64(csv),operatorGithub:'me',baseRevision:1,confirmSource:pendingSource});
+  assert.equal(result.changed,true);assert.equal(w.commits,2);
+  const saved=JSON.parse(Buffer.from(w.contents.get('records/test.json')!,'base64').toString());
+  assert.equal(saved.translation.state,'完成');assert.equal(saved.translation.revision,pendingSource?1:2);
+  if(pendingSource)assert.equal(saved.source_change.status,'confirmed');
+ }
+});
+
+test('completing an identical draft still removes the draft atomically',async()=>{
+ const w=fake({translation:{revision:0,state:'进行中'}});
+ const opts={fileId:'test',role:'tr' as const,sourcePath:'',contentB64:b64(csv),operatorGithub:'me'};
+ await completeStage(w,{...opts,baseRevision:0});
+ await saveDraft(w,opts);
+ assert.equal((await completeStage(w,{...opts,baseRevision:1})).changed,true);
+ assert.equal(w.contents.get('story/drafts/translation/test.csv'),null);
+ const record=JSON.parse(Buffer.from(w.contents.get('records/test.json')!,'base64').toString());
+ assert.equal(record.translation.revision,1);assert.equal(record.translation.draft_revision,0);
+ assert.equal(record.artifacts.translation_draft,undefined);
+});
 
 test('editor line breaks serialize as literal backslash-n without changing source',()=>{assert.equal(csvText('甲\n乙\r\n丙'), '甲\\n乙\\n丙');assert.equal(editorText('甲\\n乙'), '甲\n乙');const d=extractInfoFromCsvText(csv);d.data[0].trans='甲\n乙';const out=extractInfoFromCsvText(toCsvText(d));assert.equal(out.data[0].trans,'甲\\n乙');assert.equal(out.data[0].text,d.data[0].text);});
 test('length limit excludes formatting and ruby annotations, counts punctuation and Unicode',()=>{assert.deepEqual(lineLengths('<em\\=>文字</em>『<r\\=Prima Stella>启明星</r>』\\n你好！'),[7,3]);assert.equal(longLines([{text:'原\\n文',trans:'字'.repeat(21)}]).length,0);assert.deepEqual(longLines([{text:'原\\n文',trans:'字'.repeat(22)+'\\n短句'}]),[{row:1,line:1,length:22}]);assert.deepEqual(lineLengths('😀'),[1]);});
@@ -120,6 +210,25 @@ test('proofread completion credits translator and reviewer in the existing row',
  assert.equal(repeated.records[repeated.records.length-1]?.id,'译者');
 });
 
+test('repeated proofread completion skips commits only when CSV and TXT both match',async(t)=>{
+ const raw='[message text=one name=A]';
+ const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw))),b=>b.toString(16).padStart(2,'0')).join('');
+ const input=`id,name,text,trans\n1:text:1,A,one,一句\ninfo,test.txt,${hash},\n译者,old,,\n`;
+ t.mock.method(globalThis,'fetch',async(url: RequestInfo | URL)=>Response.json(String(url).includes('/api/script/')?{txt:raw}:{names:{A:'甲'}}));
+ const w=fake({translation:{revision:1,state:'完成'},proofread:{revision:0}}, {'story/human/test.csv':b64(setCsvTranslator(input,'翻译：translator'))});
+ const opts={fileId:'test',role:'pr' as const,sourcePath:'',contentB64:b64(input),operatorGithub:'reviewer',baseRevision:0};
+ await completeStage(w,opts);
+ const savedRecord=w.contents.get('records/test.json'),savedTxt=w.contents.get('proofread_txt/test.txt');
+ assert.equal((await completeStage(w,{...opts,baseRevision:1})).changed,false);
+ assert.equal(w.commits,1);assert.equal(w.contents.get('records/test.json'),savedRecord);
+ for(const value of [null,b64('outdated TXT')]){
+  w.contents.set('proofread_txt/test.txt',value);
+  assert.equal((await completeStage(w,{...opts,baseRevision:1})).changed,true);
+  assert.equal(w.contents.get('proofread_txt/test.txt'),savedTxt);
+ }
+ assert.equal(w.commits,3);
+});
+
 test('changing translator preserves reviewer and normalizes legacy credits without touching dialogue',async()=>{
  const files:Record<string,string>={
   'story/human/test.csv':b64(setCsvTranslator(csv,'原译者')),
@@ -190,20 +299,4 @@ test('real Unicode task categories survive parsing, draft and completion paths',
   await completeStage(w,{fileId:id,role:'tr',sourcePath,contentB64:b64(csv.replace('test.txt',id+'.txt')),operatorGithub:'me',baseRevision:1});
   assert.ok(w.written.some(f=>f.path===`story/human/${relative}`));
  }
-});
-
-import {DraftAutosave} from './autosave';
-const pause = (ms=20) => new Promise(resolve => setTimeout(resolve,ms));
-test('autosave coalesces typing and serializes edits arriving during a save',async()=>{
- const calls:string[]=[],results:string[]=[];let finish:()=>void=()=>{};
- const queue=new DraftAutosave(async value=>{calls.push(value);if(calls.length===1)await new Promise<void>(r=>{finish=r})},value=>results.push(value),5);
- queue.update('old');queue.update('current');await pause();
- queue.update('edited while saving');await pause();assert.deepEqual(calls,['current']);
- finish();await pause();assert.deepEqual(calls,['current','edited while saving']);assert.deepEqual(results,calls);queue.stop();
-});
-test('autosave stops on conflict and cancels pending saves on disconnect',async()=>{
- let calls=0,failures=0;
- const queue=new DraftAutosave(async()=>{calls++;throw Error('conflict')},(_v,e)=>{if(e)failures++},5);
- queue.update('first');await pause();queue.update('second');await pause();assert.equal(calls,1);assert.equal(failures,1);queue.stop();
- const closed=new DraftAutosave(async()=>{calls++},()=>{},5);closed.update('pending');closed.stop();await pause();assert.equal(calls,1);
 });

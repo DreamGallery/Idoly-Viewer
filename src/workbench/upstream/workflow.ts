@@ -221,7 +221,7 @@ export function applyRecordTrack(
   opts: {
     role: TrackKey
     state: TrackState
-    /** 内容未变的幂等提交：照写记录，但不推进版本 */
+    /** 正式稿未变时，保留已有版本号 */
     keepRevision?: boolean
     artifactPath: string
     directMachine: boolean
@@ -358,6 +358,20 @@ export function draftPath(
 
 const DRAFT_KEY = { tr: 'translation_draft', pr: 'proofread_draft' } as const
 
+async function readWorkContent(wrapper: any, path: string): Promise<string | null> {
+  try {
+    const file = await wrapper.getContent(WORK_OWNER, WORK_REPO, WORK_BRANCH, path, true)
+    return (file.content as string).replace(/\s/g, '')
+  } catch (error: any) {
+    if (error?.response?.status !== 404) throw error
+    return null
+  }
+}
+
+function hasOperator(metadata: any, login: string): boolean {
+  return metadata?.operator_github === login && metadata?.display_id === login && metadata?.display_source === 'github'
+}
+
 // 中途保存：只写草稿和记录，正式稿与完成状态一律不动。
 // 草稿记下它基于哪一版正式稿，恢复时据此判断是否已过期。
 export async function saveDraft(
@@ -369,13 +383,23 @@ export async function saveDraft(
     contentB64: string
     operatorGithub: string
   }
-): Promise<{ draftRevision: number; baseRevision: number }> {
+): Promise<{ changed: boolean; draftRevision: number; baseRevision: number }> {
   const { fileId, role, sourcePath, operatorGithub } = opts
   const key = role === 'tr' ? 'translation' : 'proofread'
   const record = await fetchRecordForWrite(wrapper, fileId)
   const path = draftPath(sourcePath, fileId, role)
   const baseRevision = Number(record[key]?.revision || 0)
-  const draftRevision = Number(record[key]?.draft_revision || 0) + 1
+  const currentDraftRevision = Number(record[key]?.draft_revision || 0)
+  const previous = record.artifacts?.[DRAFT_KEY[role]]
+  const contentB64 = opts.contentB64.replace(/\s/g, '')
+  if (
+    await readWorkContent(wrapper, path) === contentB64 &&
+    previous?.path === path &&
+    Number(previous.based_on_revision || 0) === baseRevision &&
+    hasOperator(previous, operatorGithub)
+  ) return { changed: false, draftRevision: currentDraftRevision, baseRevision }
+
+  const draftRevision = currentDraftRevision + 1
   const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z')
   record[key] = { ...(record[key] || {}), draft_revision: draftRevision }
   record.artifacts = record.artifacts || {}
@@ -391,7 +415,7 @@ export async function saveDraft(
   await commitWorkFiles(
     wrapper,
     [
-      { path, content: opts.contentB64 },
+      { path, content: contentB64 },
       {
         path: `records/${fileId}.json`,
         content: utf8ToBase64(JSON.stringify(record, null, 2) + '\n'),
@@ -399,7 +423,7 @@ export async function saveDraft(
     ],
     `${TRACK_LABEL[role]}中途保存 ${fileId}`
   )
-  return { draftRevision, baseRevision }
+  return { changed: true, draftRevision, baseRevision }
 }
 
 export interface DraftInfo {
@@ -485,11 +509,12 @@ export async function completeStage(
     baseRevision: number
     confirmSource?: boolean
   }
-): Promise<{ directProofread: boolean; commitSha: string }> {
+): Promise<{ changed: boolean; directProofread: boolean; commitSha: string | null }> {
   const { fileId, role, sourcePath, operatorGithub, baseRevision } = opts
   const key = role === 'tr' ? 'translation' : 'proofread'
   const record = await fetchRecordForWrite(wrapper, fileId)
-  if (record.source_change?.status === 'needs-confirmation') {
+  const sourceNeedsConfirmation = record.source_change?.status === 'needs-confirmation'
+  if (sourceNeedsConfirmation) {
     const sourceHash = extractInfoFromCsvText(base64ToUtf8(opts.contentB64)).sourceHash
     if (!opts.confirmSource || record.source_change.source_sha256 !== sourceHash) throw new Error('请核对更新后的原文并确认后再完成')
     record.source_change.status = 'confirmed'
@@ -520,30 +545,35 @@ export async function completeStage(
 
   // 旧正式稿轮换为唯一显式备份；内容没变就不必留
   const backupDir = role === 'tr' ? 'story/backups/translation' : 'story/backups/proofread'
-  let unchanged = false
-  try {
-    const old = await wrapper.getContent(
-      WORK_OWNER,
-      WORK_REPO,
-      WORK_BRANCH,
-      outputPath,
-      true
-    )
-    const oldB64 = (old.content as string).replace(/\n/g, '')
-    if (oldB64 === stamped) unchanged = true
-    else
-      files.push({
-        path: stagePathFromAny(sourcePath, fileId, backupDir),
-        content: oldB64,
-      })
-  } catch (error: any) {
-    if (error?.response?.status !== 404) throw error
-  }
+  const oldB64 = await readWorkContent(wrapper, outputPath)
+  const unchanged = oldB64 === stamped
+  if (oldB64 !== null && !unchanged) files.push({
+    path: stagePathFromAny(sourcePath, fileId, backupDir),
+    content: oldB64,
+  })
   files.push({ path: outputPath, content: stamped })
 
-  // 协议第 7 节：内容与现有正式稿完全相同且已完成 → 幂等成功，不增加版本。
-  // 仍然写记录（操作者可能变了，例如重做），只是 revision 保持不动。
+  // 校对 CSV 与 TXT 必须一并生成成功，避免已完成状态缺失成品。
+  let proofreadTxt: { path: string; content: string } | undefined
+  if (role === 'pr') {
+    const [rawTxt, dict] = await Promise.all([fetchRawTxt(fileId), fetchNameDict()])
+    if (rawTxt === null) throw new Error('缺少原始脚本，无法完成校对')
+    const parsed = extractInfoFromCsvText(base64ToUtf8(stamped))
+    const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawTxt))), b => b.toString(16).padStart(2, '0')).join('')
+    if (hash !== parsed.sourceHash) throw new Error('原始脚本版本不一致，请重新载入')
+    proofreadTxt = {path: `proofread_txt/${fileId}.txt`, content: utf8ToBase64(buildChineseTxt(rawTxt, parsed.data, dict))}
+    files.push(proofreadTxt)
+  }
+
   const idempotent = unchanged && record[key]?.state === '完成'
+  const artifact = record.artifacts?.[role === 'tr' ? 'translation_csv' : 'proofread_csv']
+  // 重复完成不修改时间戳；原文确认、草稿清理和缺失成品仍需提交。
+  if (
+    idempotent && !sourceNeedsConfirmation && !draft?.path &&
+    !Number(record[key]?.draft_revision || 0) && !record.direct_machine_proofread &&
+    artifact?.path === outputPath && hasOperator(record[key], operatorGithub) && hasOperator(artifact, operatorGithub) &&
+    (!proofreadTxt || await readWorkContent(wrapper, proofreadTxt.path) === proofreadTxt.content)
+  ) return { changed: false, directProofread: false, commitSha: null }
 
   const directProofread = applyRecordTrack(record, {
     role,
@@ -560,16 +590,6 @@ export async function completeStage(
       content: stampTranslator(opts.contentB64, completionCredit(operatorGithub)),
     })
 
-  // 校对 CSV 与 TXT 必须一并生成成功，避免已完成状态缺失成品。
-  if (role === 'pr') {
-    const [rawTxt, dict] = await Promise.all([fetchRawTxt(fileId), fetchNameDict()])
-    if (rawTxt === null) throw new Error('缺少原始脚本，无法完成校对')
-    const parsed = extractInfoFromCsvText(base64ToUtf8(stamped))
-    const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawTxt))), b => b.toString(16).padStart(2, '0')).join('')
-    if (hash !== parsed.sourceHash) throw new Error('原始脚本版本不一致，请重新载入')
-    files.push({path: `proofread_txt/${fileId}.txt`, content: utf8ToBase64(buildChineseTxt(rawTxt, parsed.data, dict))})
-  }
-
   files.push({
     path: `records/${fileId}.json`,
     content: utf8ToBase64(JSON.stringify(record, null, 2) + '\n'),
@@ -580,7 +600,7 @@ export async function completeStage(
     files,
     `${TRACK_LABEL[role]}完成 ${fileId}`
   )
-  return { directProofread, commitSha }
+  return { changed: true, directProofread, commitSha }
 }
 
 export function validateRowsHtmlTags(
