@@ -13,6 +13,33 @@ test('multiline source limits every line to 21 visible characters',()=>{
  assert.match(validateTranslation('原\\n文','短句'),/换行数量/);
  assert.equal(validateTranslation('原\\n文','字'.repeat(22)+'\\n短句',{checkLength:false}),'');
 });
+test('trailing line breaks are optional and do not make a title multiline',()=>{
+ const source='星空編1章62話 アイドルへの第一歩\\n';
+ const translated='星空篇第1章第62话 迈向偶像的第一步';
+ assert.equal(validateTranslation(source,translated),'');
+ assert.equal(validateTranslation(source,translated+'\\n'),'');
+ assert.equal(validateTranslation(source,translated+'\\n\\n'),'');
+ assert.equal(validateTranslation('标题\\n\\n','字'.repeat(80)),'');
+ assert.equal(validateTranslation('标题','译文\\n'),'');
+ assert.equal(validateTranslation(source,''),'');
+});
+test('ignoring trailing line breaks still enforces internal breaks, lengths and script safety',()=>{
+ assert.equal(validateTranslation('第一行\\n第二行\\n','一行'),'换行数量与原文不一致（原文 1 处，译文 0 处）');
+ assert.match(validateTranslation('第一行\\n第二行\\n','字'.repeat(22)+'\\n第二行'),/第 1 行 22 字/);
+ assert.equal(validateTranslation('第一行\\n第二行\\n','第一行\\n第二行'),'');
+ assert.match(validateTranslation('标题\\n','译文\n'),/脚本字符/);
+ assert.match(validateTranslation('{user}\\n','译文'),/占位符/);
+});
+test('server accepts a title without its trailing break and preserves the original field',()=>{
+ const raw='[title title=原题\\n]';
+ const csv=Papa.unparse([
+  ['id','name','text','trans'],['1:title:1','','原题\\n','译文'],
+  ['info','adv_test.txt',createHash('sha256').update(raw).digest('hex'),''],['译者','','','']
+ ]);
+ const parsed=validateCsvAgainstScript(csv,raw);
+ assert.equal(parsed.records[0].text,'原题\\n');
+ assert.equal(parsed.records[0].trans,'译文');
+});
 test('length excludes emphasis and ruby annotation but includes punctuation',()=>{
  const source='<em\\=>原</em><r\\=annotation>文</r>\\n次';
  const value='<em\\=>'+'字'.repeat(19)+'</em><r\\=annotation>文</r>！\\n次';

@@ -3,6 +3,7 @@ const wanted={message:['text','name'],narration:['text'],title:['title'],choiceg
 function valueEnd(line,start){let depth=0;for(let i=start;i<line.length;i++){if(line[i]==='\\'&&i+1<line.length){i++;continue}if(line[i]==='[')depth++;else if(line[i]===']'){if(!depth)return i;depth--}else if(line[i]===' '&&!depth&&/^[A-Za-z_][A-Za-z_0-9]*=/.test(line.slice(i+1)))return i}throw Error('脚本指令未闭合')}
 export function scriptFields(script){const fields=[];let offset=0,lineNumber=0;for(const line of script.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g)||[]){if(!line)continue;lineNumber++;const command=line.replace(/[\r\n]+$/,'');const tag=/^\[([A-Za-z_][A-Za-z_0-9]*)\b/.exec(command)?.[1];const keys=wanted[tag];if(keys){const matches=[...command.matchAll(assignments)];const speaker=matches.find(m=>m[1]==='name');const name=speaker?command.slice(speaker.index+speaker[0].length,valueEnd(command,speaker.index+speaker[0].length)):'';const counts={};for(const m of matches){const key=m[1];if(!keys.includes(key))continue;const start=m.index+m[0].length,end=valueEnd(command,start),text=command.slice(start,end);if(!text)continue;counts[key]=(counts[key]||0)+1;const kind=tag.startsWith('choice')?'choice':tag==='narration'?'narration':key;fields.push({id:`${lineNumber}:${kind}:${counts[key]}`,legacyId:`${lineNumber}:${key}:${counts[key]}`,key,name,text,start:offset+start,end:offset+end})}}offset+=line.length}return fields}
 const tokens=t=>(t.match(/\{[A-Za-z_][A-Za-z_0-9]*(?::[^{}]+)?\}|\{\d+(?::[^{}]+)?\}|<[^>]+>/g)||[]).sort().join('\0');
+export const withoutTrailingLineBreaks = text => text.replace(/(?:\\n)+$/, '');
 export function translationLineLengths(text) {
   return text.replace(/\\n/g, '\n').replace(/\r\n?/g, '\n')
     .replace(/<\/?(?:em|r)(?:\\?=[^>]*|\s[^>]*)?>/g, '')
@@ -12,9 +13,11 @@ export function validateTranslation(source, value, {checkLength = true} = {}) {
   if (!value) return '';
   if (typeof value !== 'string' || /[\r\n\[\]]/.test(value)) return '译文含有不支持的脚本字符';
   if (tokens(source) !== tokens(value)) return '占位符或标签与原文不一致';
-  if ((source.match(/\\n/g) || []).length !== (value.match(/\\n/g) || []).length) return '换行数量与原文不一致';
-  if (checkLength && source.includes('\\n')) {
-    const errors = translationLineLengths(value).flatMap((length, index) =>
+  const sourceBody = withoutTrailingLineBreaks(source), valueBody = withoutTrailingLineBreaks(value);
+  const sourceBreaks = (sourceBody.match(/\\n/g) || []).length, valueBreaks = (valueBody.match(/\\n/g) || []).length;
+  if (sourceBreaks !== valueBreaks) return `换行数量与原文不一致（原文 ${sourceBreaks} 处，译文 ${valueBreaks} 处）`;
+  if (checkLength && sourceBody.includes('\\n')) {
+    const errors = translationLineLengths(valueBody).flatMap((length, index) =>
       length > 21 ? [`第 ${index + 1} 行 ${length} 字，超过 21 字上限`] : []);
     if (errors.length) return errors.join('；');
   }

@@ -11,7 +11,7 @@
     "dev:api": "node server/local.mjs",
     "test:api": "node --test server/*.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "test:workbench": "esbuild src/workbench/workflow.test.ts src/workbench/export.test.ts src/workbench/voice-map.test.ts --bundle --platform=node --format=esm --define:import.meta.env={} --outdir=.test-build && node --test .test-build/workflow.test.js .test-build/export.test.js .test-build/voice-map.test.js",
+    "test:workbench": "esbuild src/workbench/workflow.test.ts src/workbench/export.test.ts src/workbench/voice-map.test.ts src/workbench/browser-drafts.test.ts --bundle --platform=node --format=esm --define:import.meta.env={} --outdir=.test-build && node --test .test-build/workflow.test.js .test-build/export.test.js .test-build/voice-map.test.js .test-build/browser-drafts.test.js",
     "dev:cloudflare": "wrangler dev --port 8788",
     "build:cloudflare": "node scripts/build_cloudflare.mjs && wrangler deploy --dry-run",
     "test:cloudflare": "node --test cloudflare/*.test.mjs",

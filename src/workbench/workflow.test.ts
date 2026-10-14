@@ -110,6 +110,10 @@ test('completing an identical draft still removes the draft atomically',async()=
 
 test('editor line breaks serialize as literal backslash-n without changing source',()=>{assert.equal(csvText('甲\n乙\r\n丙'), '甲\\n乙\\n丙');assert.equal(editorText('甲\\n乙'), '甲\n乙');const d=extractInfoFromCsvText(csv);d.data[0].trans='甲\n乙';const out=extractInfoFromCsvText(toCsvText(d));assert.equal(out.data[0].trans,'甲\\n乙');assert.equal(out.data[0].text,d.data[0].text);});
 test('length limit excludes formatting and ruby annotations, counts punctuation and Unicode',()=>{assert.deepEqual(lineLengths('<em\\=>文字</em>『<r\\=Prima Stella>启明星</r>』\\n你好！'),[7,3]);assert.equal(longLines([{text:'原\\n文',trans:'字'.repeat(21)}]).length,0);assert.deepEqual(longLines([{text:'原\\n文',trans:'字'.repeat(22)+'\\n短句'}]),[{row:1,line:1,length:22}]);assert.deepEqual(lineLengths('😀'),[1]);});
+test('trailing source breaks alone do not enable the multiline length limit',()=>{
+ assert.deepEqual(longLines([{text:'标题\\n\\n',trans:'字'.repeat(22)}]),[]);
+ assert.deepEqual(longLines([{text:'第一行\\n第二行\\n',trans:'字'.repeat(22)+'\\n第二行'}]),[{row:1,line:1,length:22}]);
+});
 test('format wraps selected text and returns editable selection',()=>{const em=insertFormat('前文字后',1,3,'em');assert.equal(em.text,'前<em\\=>文字</em>后');assert.equal(em.text.slice(em.start,em.end),'文字');assert.equal(insertFormat('启明星',0,3,'ruby','Prima Stella').text,'<r\\=Prima Stella>启明星</r>');assert.equal(insertFormat('',0,0,'em').text,'<em\\=>文字</em>');assert.throws(()=>insertFormat('',0,0,'ruby','a>b'));});
 
 test('completion stats merge GitHub case, ignore unfinished tracks and deduplicate chapters',()=>{
