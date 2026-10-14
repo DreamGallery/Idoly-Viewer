@@ -1,0 +1,28 @@
+/* Loaded by index.html so the entry screen is visible before the application bundle. */
+.loading-indicator{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;min-height:260px;padding:48px 24px;color:var(--primary,#1428ff)}
+.loading-mark{display:block;width:112px;aspect-ratio:310/188;background:currentColor;mask:url('./assets/idoly-loading-logo.svg') center/contain no-repeat;-webkit-mask:url('./assets/idoly-loading-logo.svg') center/contain no-repeat;animation:loading-breathe 2s ease-in-out infinite}
+.loading-caption{display:flex;justify-content:center;gap:.24em;font-family:Arial,sans-serif;font-size:14px;font-weight:500;line-height:1.4}
+.loading-caption>.loading-letter{display:block;animation:loading-letter 1.6s ease-in-out infinite both}
+@keyframes loading-breathe{0%,100%{opacity:.7}50%{opacity:1}}
+@keyframes loading-letter{0%,20%,100%{transform:translateY(0)}6%{transform:translateY(-4px)}14%{transform:translateY(.6px)}}
+
+/* A real curtain joins navigation and data loading without remounting persistent audio. */
+.page-transition{min-width:0}
+.page-curtain{position:fixed;inset:0;z-index:80;display:grid;place-items:center;overflow:hidden;isolation:isolate;background:#1428ff;color:#fff;--curtain-before:inset(0 100% 0 0);--curtain-after:inset(0 0 0 100%)}
+.page-curtain::before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,#ffffff0d,transparent 45%,#ffffff09);pointer-events:none}
+.page-curtain .loading-indicator{color:inherit;gap:28px;transform:translateY(-24px)}
+.page-curtain .loading-mark{width:clamp(132px,15vw,180px)}
+.page-curtain[data-phase=covering]{animation:page-cover var(--page-cover-duration) cubic-bezier(.65,0,.35,1) both}
+.page-curtain[data-phase=waiting]{clip-path:inset(0)}
+.page-curtain[data-phase=revealing]{animation:page-reveal var(--page-reveal-duration) cubic-bezier(.65,0,.35,1) both}
+.page-curtain[data-phase=covering] .loading-indicator{animation:curtain-logo-in var(--page-cover-duration) ease-in both}
+.page-curtain[data-phase=revealing] .loading-indicator{animation:curtain-logo-out var(--page-reveal-duration) ease-out both}
+@keyframes page-cover{from{clip-path:var(--curtain-before)}to{clip-path:inset(0)}}
+@keyframes page-reveal{from{clip-path:inset(0)}to{clip-path:var(--curtain-after)}}
+@keyframes curtain-logo-in{from{opacity:0}to{opacity:1}}
+@keyframes curtain-logo-out{to{opacity:0}}
+@media(max-width:700px){.loading-indicator{min-height:220px;padding:36px 20px}}
+@media(prefers-reduced-motion:reduce){
+ .loading-mark,.loading-caption>span{animation:none}
+ .page-curtain,.page-curtain .loading-indicator{animation:none!important;clip-path:none}
+}

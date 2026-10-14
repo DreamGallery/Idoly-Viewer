@@ -1,10 +1,11 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Disc3, Headphones, ListMusic, Loader2, Maximize2, Music2, Pause, Play, Repeat, Repeat1, Search, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import './music-player.css';
 import { resourceJson } from './resource-snapshot';
 
 type Track = { id: string; title: string; originalTitle: string; artist: string; audio: string; cover: string; version: string };
 type Mode = 'repeat' | 'single' | 'shuffle';
+const PANEL_FADE_OUT_MS = 180;
 const modeLabels = { repeat: '列表循环', single: '单曲循环', shuffle: '随机播放' };
 const clock = (value: number) => `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
 
@@ -29,7 +30,8 @@ export default function MusicPlayer() {
   const wantsPlay = useRef(false);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [index, setIndex] = useState(0);
-  const [expanded, setExpanded] = useState(false);
+  const [panel, setPanel] = useState<'closed' | 'open' | 'closing'>('closed');
+  const expanded = panel !== 'closed';
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -87,13 +89,24 @@ export default function MusicPlayer() {
     return () => document.removeEventListener('play', pauseForMedia, true);
   }, []);
 
-  useEffect(() => {
-    if (!expanded) return;
+  useLayoutEffect(() => {
+    const modal = dialog.current;
+    if (!expanded) {
+      if (modal?.open) { modal.close(); expandButton.current?.focus({ preventScroll: true }); }
+      return;
+    }
     const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    dialog.current?.showModal();
+    modal?.showModal();
     return () => { document.body.style.overflow = previous; };
   }, [expanded]);
+
+  useEffect(() => {
+    if (panel !== 'closing') return;
+    // Release the modal even if its animation is interrupted.
+    const timeout = window.setTimeout(() => setPanel('closed'), PANEL_FADE_OUT_MS + 100);
+    return () => window.clearTimeout(timeout);
+  }, [panel]);
 
   const start = useCallback(() => {
     const player = audio.current;
@@ -116,37 +129,37 @@ export default function MusicPlayer() {
     const step = mode === 'shuffle' && tracks.length > 1 ? 1 + Math.floor(Math.random() * (tracks.length - 1)) : 1;
     choose((index + step) % tracks.length);
   };
-  const close = () => { dialog.current?.close(); setExpanded(false); expandButton.current?.focus(); };
-  const playbackIcon = loading ? <Loader2 className="music-spinner" size={22}/> : playing ? <Pause size={22} fill="currentColor"/> : <Play size={22} fill="currentColor"/>;
+  const close = () => setPanel(window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'closed' : 'closing');
+  const playbackIcon = loading ? <Loader2 className="music-spinner" size={22}/> : playing ? <Pause size={22} fill="currentColor"/> : <Play className="music-play-triangle" size={22} fill="currentColor"/>;
   const modeIcon = mode === 'single' ? <Repeat1 size={19}/> : mode === 'shuffle' ? <Shuffle size={19}/> : <Repeat size={19}/>;
 
   // Old snapshots remain usable while the Docker prepares the first music release.
   if (!import.meta.env.DEV && !tracks.length) return null;
-  return <div className="music-player">
+  return <div className="music-player" data-panel={panel}>
     <audio ref={audio} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
       onPlaying={() => setLoading(false)} onWaiting={() => { if (wantsPlay.current) setLoading(true); }}
       onTimeUpdate={event => setPosition(event.currentTarget.currentTime)}
       onDurationChange={event => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)}
       onEnded={() => { if (mode === 'single') choose(index); else next(); }}
       onError={() => { wantsPlay.current = false; setPlaying(false); setLoading(false); setError('音乐载入失败，点击播放重试'); }}/>
-    {!expanded && <aside className={`music-dock ${playing ? 'is-playing' : ''}`} aria-label="迷你音乐播放器">
-      <button ref={expandButton} className="music-dock-track" aria-label="展开音乐播放器" aria-expanded={false} onClick={() => setExpanded(true)}>
+    <aside className={`music-dock ${playing ? 'is-playing' : ''}`} aria-label="迷你音乐播放器" aria-hidden={expanded}>
+      <button ref={expandButton} className="music-dock-track" aria-label="展开音乐播放器" aria-expanded={expanded} onClick={() => setPanel('open')}>
         <span className="music-dock-cover">{track ? <img src={track.cover} alt=""/> : <Music2 size={24}/>}</span>
         <span className="music-dock-label"><strong>{track?.title || 'HOSHIMI MUSIC'}</strong><small>{error || (loading ? '正在准备音乐…' : track?.artist || (catalogError ? '曲库载入失败' : '正在载入曲库…'))}</small></span>
       </button>
       <span className="music-equalizer" aria-hidden="true"><i/><i/><i/><i/></span>
       <button className="music-play music-dock-play" disabled={!track} aria-label={playing || loading ? '暂停音乐' : '播放音乐'} onClick={toggle}>{playbackIcon}</button>
       <button className="music-icon music-dock-next" disabled={!track} aria-label="下一首" onClick={next}><SkipForward size={19}/></button>
-      <button className="music-icon" aria-label="展开音乐面板" onClick={() => setExpanded(true)}><Maximize2 size={17}/></button>
+      <button className="music-icon" aria-label="展开音乐面板" onClick={() => setPanel('open')}><Maximize2 size={17}/></button>
       <div className="music-dock-progress" aria-hidden="true"><i style={{width: `${duration ? position / duration * 100 : 0}%`}}/></div>
-    </aside>}
-    <dialog ref={dialog} className="music-dialog" aria-labelledby="music-heading" onCancel={close} onClose={() => { setExpanded(false); expandButton.current?.focus(); }} onClick={event => { if (event.target === event.currentTarget) close(); }}>
+    </aside>
+    <dialog ref={dialog} className="music-dialog" data-state={panel} style={{ '--music-fade-out': `${PANEL_FADE_OUT_MS}ms` } as React.CSSProperties} aria-labelledby="music-heading" onCancel={event => { event.preventDefault(); close(); }} onClose={() => setPanel('closed')} onAnimationEnd={event => { if (event.target === event.currentTarget && event.animationName === 'music-panel-out') setPanel('closed'); }} onClick={event => { if (event.target === event.currentTarget) close(); }}>
       {expanded && <div className="music-surface">
         <header className="music-header"><span className="music-brand"><Headphones size={20}/><span id="music-heading">HOSHIMI MUSIC</span></span><button className="music-icon" aria-label="收起音乐播放器" onClick={close}><ChevronDown size={24}/></button></header>
         <div className="music-layout">
           <section className="music-now" aria-label="正在播放">
             <div className="music-artwork">{track ? <img src={track.cover} alt={`${track.title} · 游戏歌曲封面`}/> : <Disc3 size={100}/>}<span className="music-version">{track?.version || '游戏音乐'}</span></div>
-            <div className="music-track-heading"><p>NOW PLAYING</p><h2>{track?.title || '每一颗星，都有自己的声音'}</h2><span>{track?.artist || 'IDOLY PRIDE'}</span></div>
+            <div className="music-track-heading"><p>NOW PLAYING</p><h2>{track?.title || 'HOSHIMI MUSIC'}</h2><span>{track?.artist || 'IDOLY PRIDE'}</span></div>
             <div className="music-timeline"><input type="range" aria-label="音乐播放进度" min={0} max={duration || 1} step={.1} disabled={!duration} value={Math.min(position, duration || 0)} style={{'--fill': `${duration ? position / duration * 100 : 0}%`} as React.CSSProperties} onChange={event => { const time=Number(event.target.value);if(audio.current)audio.current.currentTime=time;setPosition(time); }}/><div><span>{clock(position)}</span><span>{clock(duration)}</span></div></div>
             <div className="music-transport">
               <button className="music-icon music-mode" aria-label={modeLabels[mode]+'，点击切换'} onClick={() => setMode(mode === 'repeat' ? 'single' : mode === 'single' ? 'shuffle' : 'repeat')}>{modeIcon}</button>

@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
+import { PageLink } from './PageTransition';
+import PageLoading from './PageLoading';
 import { ArrowRight, BookOpen, ChevronDown, Search, X } from 'lucide-react';
 import { useJson } from './catalog';
 import CardPreview from './CardPreview';
@@ -46,7 +48,7 @@ export default function TextUpdates({ catalog, categories }: { catalog: Catalog;
       <label className="updates-select">剧情分类<select aria-label="更新剧情分类" value={category} onChange={e => { setCategory(e.target.value); setPage(1); }}><option value="all">全部分类</option>{Object.entries(categories).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
       <label className="updates-select">变更类型<select aria-label="文本变更类型" value={kind} onChange={e => { setKind(e.target.value); setPage(1); }}><option value="all">全部变更</option><option value="added">新增文件</option><option value="modified">修改文件</option></select></label>
     </div>
-    {!data ? <div className="empty" role={error ? 'alert' : 'status'}>{error || '正在载入文本更新…'}</div> : <>
+    {!data ? error ? <div className="empty" role="alert">{error}</div> : <PageLoading/> : <>
       <p className="updates-results" role="status">{rows.length.toLocaleString()} 篇文本</p>
       {!rows.length && <div className="empty">{pendingOnly ? '暂无符合条件的待补全资料' : viewRows.length ? '暂无符合筛选条件的文本更新' : '最近两周暂无文本更新'}</div>}
       <div className="updates-grid">{groups.slice((current - 1) * pageSize, current * pageSize).map(group => <article key={group.id} className={`updates-card updates-${group.items[0].category_id}`}>
@@ -55,7 +57,7 @@ export default function TextUpdates({ catalog, categories }: { catalog: Catalog;
           <summary><div><span className="updates-category">{categories[group.items[0].category_id]}</span><h3>{group.title}</h3>{group.items.some(row => row.updated_at !== null) && <time>{dateFormat.format(Math.max(...group.items.map(row => row.updated_at || 0)))}</time>}{group.items[0].pending && <span className="updates-pending">待补全资料</span>}</div><ChevronDown size={18}/></summary>
           <ul className="updates-chapters">{group.items.map(row => <li key={row.script_id}>
             <div className="updates-meta"><time>{row.updated_at === null ? '提交时间未知' : dateFormat.format(row.updated_at)}</time><span>{row.origin}</span>{row.change_kind && <span className={'update-kind ' + row.change_kind}>{row.change_kind === 'added' ? '新增' : '修改'}</span>}</div>
-            <Link className="updates-chapter-link" to={`/chapter/${encodeURIComponent(row.script_id)}`}><span><strong>{row.title}</strong>{row.pending && <small>{row.script_id}</small>}<small>{row.line_count} 条文本</small></span><ArrowRight size={16}/></Link>
+            <PageLink className="updates-chapter-link" to={`/chapter/${encodeURIComponent(row.script_id)}`}><span><strong>{row.title}</strong>{row.pending && <small>{row.script_id}</small>}<small>{row.line_count} 条文本</small></span><ArrowRight size={16}/></PageLink>
             {row.commit && <div className="updates-links"><a href={`https://github.com/DreamGallery/${row.repo}/blob/${row.revision}/${row.csv_path.split('/').map(encodeURIComponent).join('/')}`} target="_blank" rel="noreferrer">CSV ↗</a><a href={`https://github.com/DreamGallery/${row.repo}/commit/${row.commit}`} target="_blank" rel="noreferrer">查看提交 ↗</a></div>}
           </li>)}</ul>
         </details>

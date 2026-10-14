@@ -5,6 +5,7 @@
 | 素材 | 来源与处理 |
 | --- | --- |
 | 官网字标与标签栏图标 | IDOLY PRIDE 官网；favicon 来源 `https://idolypride.jp/shared/img/common/favicon.ico`，字标路径位于 `src/App.tsx` |
+| 加载页双行字标 | 官网首页 `#blindLogo` 的 SVG，保存于 `src/assets/idoly-loading-logo.svg` |
 | 动态背景 | 游戏 APK 的 `Texture2D ip_bg_black`，保存为 `images/background/ip-pattern.png`，由 CSS 控制色彩与移动 |
 | 花色、类型、SP、觉醒筛选图标 | 游戏 APK 对应 Sprite，保存于 `images/card-filters/`；提取工具为 `scripts/extract-card-filter-icons.py` |
 | 角色 Q 版头像 | Octo 的 `img_chr_icon_<Character.assetId>`，保留透明图形与完整显示区域 |

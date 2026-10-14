@@ -3,7 +3,8 @@ import { taskDatePages } from './date-pages';
 import { TaskExport } from './TaskExport';
 import { exportTxt, downloadFile } from './export';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { PageLink } from '../PageTransition';
+import PageLoading from '../PageLoading';
 import { api, Auth, Github, decode, encode, Issue } from './github';
 import { CsvTextInfo, type CsvDataLine, extractInfoFromCsvText, mergeTranslation, toCsvText } from './upstream/csv';
 import { applyTrack, completeStage, completionPath, docFromIssue, DocTask, draftInfoOf, fetchRecordForWrite, myStatusOf, sameWorkUser, saveDraft, syncRecordTracks, TrackKey, validateRowsHtmlTags, WORK_BRANCH, WORK_OWNER, WORK_REPO } from './upstream/workflow';
@@ -26,15 +27,16 @@ function download(text: string, name: string) {
   const url = URL.createObjectURL(new Blob(['\uFEFF', text], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export function Login({ auth, refresh }: { auth: Auth | null; refresh: () => void }) {
+export function Login({ auth, refresh }: { auth: Auth | null; refresh: (animate?: boolean) => void }) {
   const [error, setError] = useState(''),[localName,setLocalName]=useState('');
-  return <div className="work-login">{auth?.user ? <><span>{auth.user.name || auth.user.login}</span><button onClick={() => { api('auth/logout', {}, auth.csrf).then(refresh).catch(e => setError(message(e))); }}>退出登录</button></> : auth?.local ? <><input aria-label="本地协作者名称" placeholder="本地协作者名称" value={localName} onChange={e=>setLocalName(e.target.value)}/><button onClick={()=>api('auth/local',{login:localName}).then(refresh).catch(e=>setError(message(e)))}>进入本地协作</button></> : auth?.configured ? <a className="work-button" href={'/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search)}>GitHub 登录</a> : <span>{auth ? "GitHub 登录尚未配置" : "正在检查登录状态…"}</span>}{error && <span role="alert">{error}</span>}</div>;
+  return <div className="work-login">{auth?.user ? <><span>{auth.user.name || auth.user.login}</span><button onClick={() => { api('auth/logout', {}, auth.csrf).then(() => refresh(false)).catch(e => setError(message(e))); }}>退出登录</button></> : auth?.local ? <><input aria-label="本地协作者名称" placeholder="本地协作者名称" value={localName} onChange={e=>setLocalName(e.target.value)}/><button onClick={()=>api('auth/local',{login:localName}).then(() => refresh()).catch(e=>setError(message(e)))}>进入本地协作</button></> : auth?.configured ? <a className="work-button" href={'/api/auth/login?returnTo=' + encodeURIComponent(location.pathname + location.search)}>GitHub 登录</a> : <span>{auth ? "GitHub 登录尚未配置" : "正在检查登录状态…"}</span>}{error && <span role="alert">{error}</span>}</div>;
 }
 export function WorkbenchPage() {
   const catalog=useCatalog();
   const [auth, setAuth] = useState<Auth | null>(null);
   const [docs, setDocs] = useState<DocTask[]>([]), [error, setError] = useState('');
   const [loading, setLoading] = useState(true), [reload, setReload] = useState(0);
+  const [animateLoading, setAnimateLoading] = useState(true);
   const [search, setSearch] = useState(''), [mine, setMine] = useState(false);
   const [category, setCategory] = useState('all'), [status, setStatus] = useState('all'), [sort, setSort] = useState('default');
   const [page, setPage] = useState(1);
@@ -44,7 +46,7 @@ export function WorkbenchPage() {
   const eligible = (d: DocTask) => selectionMode === 'export' || !!selectionMode && d[selectionMode].state === '待认领';
   const changeMode = (mode: 'export' | TrackKey) => { setSelectionMode(current => current === mode ? null : mode); setSelected(new Set()); setClaimNotice(''); };
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const refresh = () => { setAuth(null); setDocs([]); setSelected(new Set()); setSelectionMode(null); setReload(n => n + 1); };
+  const refresh = (animate = true) => { setAnimateLoading(animate); setLoading(true); setAuth(null); setDocs([]); setSelected(new Set()); setSelectionMode(null); setReload(n => n + 1); };
   useEffect(() => {
     let active = true;
     setLoading(true); setError(''); setDocs([]);
@@ -110,8 +112,8 @@ export function WorkbenchPage() {
   return <section className="work-page">
     <header className="page-heading work-heading"><div><p className="eyebrow">TRANSLATION WORKSPACE</p><h2>翻译协作</h2></div><Login auth={auth} refresh={refresh} /></header>
     <section className="category-directory">{auth?.local&&<p className="local-notice">本地协作测试 · 任务与稿件仅保存到本机，不会提交 GitHub。</p>}
-    {error && <p className="work-error" role="alert">{error}<button onClick={refresh}>重试</button></p>}
-    {loading && <p role="status">正在读取协作信息…</p>}
+    {error && <p className="work-error" role="alert">{error}<button onClick={() => refresh()}>重试</button></p>}
+    {loading && animateLoading && <PageLoading/>}
     {!loading && !error && !auth?.canCollaborate && <p className="work-access">{auth?.user ? '当前账号没有' : '登录并拥有'}<a href={`https://github.com/${encodeURIComponent(WORK_OWNER)}/${encodeURIComponent(WORK_REPO)}`} target="_blank" rel="noopener noreferrer">工作仓库</a>{auth?.user ? '的写权限，协作任务已隐藏。' : '写权限后，可查看协作任务。'}</p>}
     {auth?.canCollaborate && !loading && !error && <>
       <CompletionStats tasks={docs} login={auth.user?.login || ''} />
@@ -133,7 +135,7 @@ export function WorkbenchPage() {
         const content = <><small>{STORY_LABELS[storyKind(d.title)]} · {docStatus(d)}</small><strong>{catalog.story_titles?.[d.title]||d.title}</strong><small>{d.title}</small><span>翻译：{d.tr.state} {d.tr.user.trim()}</span><span>校对：{d.pr.state} {d.pr.user.trim()}</span><small className="work-task-date">{taskTimestamp(d.createdAt) ? <>发布于 <time dateTime={d.createdAt} title="北京时间">{publishedDate.format(new Date(d.createdAt!))}</time></> : '发布时间未提供'}</small></>;
         return selectionMode
           ? <button key={d.number} type="button" disabled={claiming || !eligible(d)} className="work-task-option" aria-label={'选择 ' + d.title} aria-pressed={selected.has(d.number)} onClick={() => setSelected(prev => { const next = new Set(prev); if (next.has(d.number)) next.delete(d.number); else next.add(d.number); return next; })}>{content}</button>
-          : <Link key={d.number} to={'/chapter/' + encodeURIComponent(d.title) + '?issue=' + d.number}>{content}</Link>;
+          : <PageLink key={d.number} to={'/chapter/' + encodeURIComponent(d.title) + '?issue=' + d.number}>{content}</PageLink>;
       })}</div>
       {currentDate && <nav className="work-task-pagination" aria-label="协作任务日期分页">
         <button disabled={currentPage===1} onClick={() => setPage(currentPage-1)}>较新日期</button>
@@ -180,6 +182,8 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     playingAudio.current = audio;
   }, []);
   const [doc, setDoc] = useState<CsvTextInfo | null>(null), [sourceHash, setSourceHash] = useState(''), [auth, setAuth] = useState<Auth | null>(null), [task, setTask] = useState<DocTask | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [animateLoading, setAnimateLoading] = useState(true);
   const canCollaborate = !!auth?.canCollaborate && !!auth.user;
   const readerIdentity = canCollaborate ? 'github:' + auth.user!.login.toLowerCase() : 'original';
   const [documentOwner, setDocumentOwner] = useState<string | null>(null);
@@ -196,10 +200,16 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
   const [draftLoaded, setDraftLoaded] = useState(false), [sourceConfirmed, setSourceConfirmed] = useState(false);
   const [sourceReview, setSourceReview] = useState<{hash:string; archives:string[]} | null>(null);
   useEffect(() => { latestDoc.current = doc; }, [doc]);
-  const refreshAuth = () => { api<Auth>('auth/status').then(setAuth).catch(e => setError(message(e))); };
+  const refreshAuth = (animate = true) => {
+    setAnimateLoading(animate); setAuthLoading(true);
+    // Logout immediately hides repository drafts while reloading public originals.
+    if (!animate) setAuth(current => current && { ...current, user: null, csrf: null, canCollaborate: false });
+    api<Auth>('auth/status').then(setAuth).catch(e => setError(message(e))).finally(() => setAuthLoading(false));
+  };
   useEffect(() => {
     let active = true;
-    api<Auth>('auth/status').then(a => { if (active) setAuth(a); }).catch(e => { if (active) setError(message(e)); });
+    setAuthLoading(true);
+    api<Auth>('auth/status').then(a => { if (active) setAuth(a); }).catch(e => { if (active) setError(message(e)); }).finally(() => { if (active) setAuthLoading(false); });
     return () => { active = false; };
   }, [scriptId]);
   useEffect(() => {
@@ -353,7 +363,7 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     setRowFilter({ query, onlyEmpty, indices });
   }
   const rows = visibleDoc?.data.flatMap((row, i) => rowFilter.indices === null || rowFilter.indices.has(i) ? [{ row, i }] : []);
-  return <section className="work-editor" aria-label="剧情翻译编辑器"><header><h2>剧情文本</h2><Login auth={auth} refresh={refreshAuth} /></header>
+  return <section className="work-editor" aria-label="剧情翻译编辑器">{authLoading && animateLoading && <PageLoading/>}<header><h2>剧情文本</h2><Login auth={auth} refresh={refreshAuth} /></header>
     <div className="work-toolbar">{auth?.local&&<p className="local-notice">本地协作测试 · 所有提交保存在本机</p>}<span>{remoteLabel} · {visibleDoc?.data.filter(r => r.trans.trim()).length || 0} / {visibleDoc?.data.length || 0}</span><button disabled={!visibleDoc} onClick={() => run(async()=>{if(visibleDoc){const errors=validateRowsHtmlTags(visibleDoc.data);if(errors.length)throw new Error(errors.join('；'));download(toCsvText(visibleDoc),scriptId+'.csv')}})}>导出 CSV</button><label className="work-button">导入 CSV<input type="file" accept=".csv,text/csv" hidden disabled={!visibleDoc || busy} onChange={e => { const file = e.target.files?.[0]; if (file) run(() => importCsv(file)); e.target.value = ''; }} /></label><button disabled={!visibleDoc || busy} onClick={() => run(async () => { if (visibleDoc) { downloadFile(await exportTxt(scriptId, toCsvText(visibleDoc), remoteReady), scriptId + '.txt'); setNotice('TXT 已导出；未翻译的台词保留原文'); } })}>导出 TXT</button>{visibleDoc && draftAvailable && <button onClick={() => download(draftAvailable, scriptId + '-旧草稿.csv')}>下载旧草稿</button>}</div>
     {auth?.canCollaborate && <div className="work-collaboration"><div className="work-toolbar"><select aria-label="协作工序" value={role} disabled={busy} onChange={e => { setRole(e.target.value as TrackKey); setRevising(false); setRemoteReady(false); setDraftLoaded(false); }}><option value="tr">翻译</option><option value="pr">校对</option></select>{remoteReady && task && <><button disabled={busy || !auth?.user || task[role].state !== '待认领'} onClick={() => run(claim)}>认领{role === 'tr' ? '翻译' : '校对'}</button>{task[role].state === '完成' && !revising && <button disabled={busy || !auth?.user} onClick={() => setRevising(true)}>修订{role === 'tr' ? '翻译' : '校对'}</button>}</>}<button disabled={busy || remoteReady} onClick={() => run(connect)}>{remoteReady ? '已连接任务' : '连接协作任务'}</button>{task && !auth?.local && <a href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/issues/${task.number}`} target="_blank" rel="noreferrer">任务 #{task.number}</a>}</div>
     {remoteReady && task && <><p>翻译：{task.tr.state} {task.tr.user.trim() || '—'} / 校对：{task.pr.state} {task.pr.user.trim() || '—'}</p><div className="work-toolbar">{(['ai', 'translated', 'proofread', 'draft'] as const).map((s, i) => <button disabled={busy} key={s} onClick={() => run(() => loadStage(s))}>{['载入机器译文', '载入翻译稿', '载入校对稿', '恢复远端草稿'][i]}</button>)}</div>{active?.blocked && <p>{active.blockMsg}</p>}</>}
@@ -373,7 +383,7 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
       </form>
       <button aria-pressed={rowFilter.onlyEmpty} onClick={() => applySearch(rowFilter.query, !rowFilter.onlyEmpty)}>只看未翻译</button>
       <span>编辑自动保存到此浏览器；上传需点击「保存 GitHub 草稿」</span>
-    </div><div className="work-rows">{rows?.map(({ row, i }) => <TranslationRow key={i} row={row} index={i} clips={voiceMap.get(i)?.clips} disabled={busy} onChange={editRow} onPlay={playVoice} />)}</div></> : !error && <p>正在读取原文…</p>}
+    </div><div className="work-rows">{rows?.map(({ row, i }) => <TranslationRow key={i} row={row} index={i} clips={voiceMap.get(i)?.clips} disabled={busy} onChange={editRow} onPlay={playVoice} />)}</div></> : !error && animateLoading && <PageLoading/>}
     {visibleDoc && canCollaborate && <footer className="work-editor-actions">{remoteReady && task && <div className="work-toolbar"><button disabled={busy || active?.activeRole !== role} onClick={() => run(() => submit(false))}>{auth?.local?'保存本地协作草稿':'保存 GitHub 草稿'}</button><button className="work-primary" disabled={busy || active?.activeRole !== role} onClick={() => run(() => submit(true))}>完成{role === 'tr' ? '翻译' : '校对'}</button></div>}
 {error && <p className="work-error" role="alert">{error}</p>}{busy && <p role="status">正在处理…</p>}</footer>}
   </section>;
