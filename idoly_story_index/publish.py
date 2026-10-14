@@ -156,6 +156,9 @@ def snapshot_plan(stage, *, public_base='', prefix='idoly-v1'):
             body = original_csv(path.read_bytes().decode('utf-8-sig')).encode()
         elif relative.startswith('web/') and path.suffix == '.json':
             value = json.loads(path.read_bytes())
+            if relative == 'web/data/catalog.json':
+                value['filterImages'] = {url:target for url,target in media_urls.items()
+                                         if url.startswith(('/images/groups/', '/images/characters/chibi/', '/images/card-filters/'))}
             if relative.startswith('web/data/stories/'):
                 value = original_story(value)
             if relative.startswith('web/catalog/') and '/chapters/' in relative:

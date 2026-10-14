@@ -1,4 +1,9 @@
 """Card filter metadata from Card parameters and actual Skill categories."""
+import re
+
+
+def is_birthday_card(card):
+    return re.fullmatch(r'[a-z]+-\d+-birt-\d+', card.get('assetId', '')) is not None
 
 
 def card_traits(card, skills):
@@ -10,4 +15,5 @@ def card_traits(card, skills):
         'role': {1: 'scorer', 2: 'buffer', 3: 'supporter'}.get(card['type']),
         'hasSp': any(skills.get(card.get('skillId'+str(i)), {}).get('categoryType') == 1
                      for i in range(1, 5)),
+        'isBirthday': is_birthday_card(card),
     }

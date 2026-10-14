@@ -3,6 +3,13 @@ import { X, Play } from 'lucide-react';
 import type { Entry } from './catalog';
 export type CardVideo={url:string;label:string;poster?:string;aspect_ratio?:number};
 
+function PreviewImage({image,alt,expanded=false}:{image:NonNullable<Entry['group_images']>[number];alt:string;expanded?:boolean}){
+ const style:CSSProperties={aspectRatio:image.aspect_ratio||undefined,objectFit:image.aspect_ratio?'fill':'contain'};
+ const width=expanded&&image.aspect_ratio?`min(86vw, ${70*image.aspect_ratio}dvh)`:undefined;
+ const picture=<img style={{...style,width:image.frame_url?undefined:width}} src={image.url} alt={alt} loading={expanded?undefined:'lazy'}/>;
+ return image.frame_url?<span className="photo-preview-image" style={{width}}>{picture}<span className="photo-rarity-frame" style={{borderImageSource:`url(${image.frame_url})`}} aria-hidden="true"/></span>:picture;
+}
+
 export default function CardPreview({images,title,videos=[],compact=false,portrait=false,zoomable=true}:{images:NonNullable<Entry['group_images']>;title:string;videos?:CardVideo[];compact?:boolean;portrait?:boolean;zoomable?:boolean}){
  const dialog=useRef<HTMLDialogElement>(null),player=useRef<HTMLVideoElement>(null);
  const [visible,setVisible]=useState(false),[selected,setSelected]=useState(0),[movie,setMovie]=useState(false),[loading,setLoading]=useState(false),[failed,setFailed]=useState(false);
@@ -23,7 +30,7 @@ export default function CardPreview({images,title,videos=[],compact=false,portra
  return <>
   <div className={(compact?'group-cover-preview':'card-previews')+(portrait?' character-portrait-preview':'')}>
    {(compact?images.slice(0,portrait?2:1):images).map((item,index)=><Preview key={item.url} className={'card-preview'+(zoomable?'':' card-preview-static')} aria-label={zoomable?'放大 '+imageLabel(item.label):undefined} onClick={zoomable?()=>open(index):undefined}>
-    <img style={{aspectRatio:item.aspect_ratio||undefined,objectFit:item.aspect_ratio?'fill':'contain'}} src={item.url} alt={imageLabel(item.label)} loading="lazy"/>
+    <PreviewImage image={item} alt={imageLabel(item.label)}/>
     {!compact&&images.length>1&&<span>{item.label}</span>}
    </Preview>)}
    {zoomable&&videos.length>0&&<button className="animated-card-button" onClick={()=>open(0,true)} aria-label={'播放 '+title+' 动态卡面'}><Play size={15}/>动态卡面</button>}
@@ -38,7 +45,7 @@ export default function CardPreview({images,title,videos=[],compact=false,portra
       {failed?<><span>动态卡面暂时无法读取。</span><button onClick={()=>{setFailed(false);setLoading(true);player.current?.load();player.current?.play().catch(()=>{setFailed(true);setLoading(false)})}}>重试</button></>:<span>正在读取动态卡面…</span>}
      </div>}
     </div>
-    :image&&<img style={{aspectRatio:image.aspect_ratio||undefined,objectFit:image.aspect_ratio?'fill':'contain',width:image.aspect_ratio?'min(86vw, '+70*image.aspect_ratio+'dvh)':undefined}} src={image.url} alt={imageLabel(image.label)}/>)}
+    :image&&<PreviewImage image={image} alt={imageLabel(image.label)} expanded/>)}
    {(images.length+videos.length>1)&&<div className="lightbox-stages">{images.map((item,index)=><button key={item.url} aria-pressed={!movie&&selected===index} onClick={()=>open(index)}>{item.label}</button>)}{videos.map((item,index)=><button key={item.url} aria-label={'播放 '+item.label+' 动态卡面'} aria-pressed={movie&&selected===index} onClick={()=>open(index,true)}><Play size={13}/>{item.label}</button>)}</div>}
   </dialog>}
  </>;

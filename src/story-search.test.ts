@@ -45,7 +45,7 @@ test('search includes ancestor labels and references and combines with card/stat
   const index = fixture();
   assert.equal(filterStories(index,{...filters,category:'main',query:'chapter one 主线'}).length,1);
   assert.equal(filterStories(index,{...filters,category:'main',query:'TOKYO'}).length,1);
-  const selected = {...filters,query:'星空',status:'human',cardFilters:{...defaultCardFilters,spOnly:true,evolutionOnly:true}};
+  const selected = {...filters,query:'星空',status:'human',cardFilters:{...defaultCardFilters,spOnly:true,special:'evolution' as const}};
   assert.deepEqual(ids(filterStories(index,selected)), ['adv_card_ai_01_01']);
   assert.deepEqual(filterStories(index,{...selected,status:'completed'}), []);
   assert.deepEqual(filterStories(index,{...selected,cardFilters:{...selected.cardFilters,attribute:'dance'}}), []);

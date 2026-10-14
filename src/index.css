@@ -131,6 +131,7 @@ body::before{content:"";position:fixed;inset:-439px;z-index:-1;pointer-events:no
 .card-trait-filters{display:flex;align-items:center;flex-wrap:wrap;gap:12px 22px;border-top:1px solid #e7eaf4;margin-top:16px;padding-top:14px}
 .card-trait-options{display:flex;align-items:center;gap:8px}.card-trait-label{font-size:12px;color:#77829a;margin-right:3px}
 .card-trait-icon{display:grid;place-items:center;width:48px;height:48px;padding:9px;border:2px solid #e7eaf2;border-radius:6px;background:#fff;color:#7785a0;transition:background .15s,border-color .15s}
+.card-trait-icon>svg{display:block;width:100%;height:100%}
 .game-filter-icon{display:block;width:100%;height:100%;background:currentColor;mask-size:contain;mask-repeat:no-repeat;mask-position:center;-webkit-mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center}
 .game-filter-image{display:block;width:100%;height:100%;object-fit:contain}
 .character-group-logo img{display:block;width:68px;height:68px;object-fit:contain;border-radius:3px}
@@ -158,6 +159,11 @@ body::before{content:"";position:fixed;inset:-439px;z-index:-1;pointer-events:no
 @media(min-width:901px) and (max-width:1100px){.header-left{gap:16px}.brand svg{width:132px}.topbar nav{gap:20px}}
 
 .card-preview.card-preview-static{cursor:default}
+.card-preview>.photo-preview-image,.card-lightbox>.photo-preview-image{display:block;position:relative;padding:0;line-height:0;margin:auto}
+.photo-preview-image>img{display:block;width:100%;height:auto;max-height:none}
+/* Scale the native 12px edges of the 460×258 frame with the photo. */
+.photo-preview-image>.photo-rarity-frame{position:absolute;inset:0;display:block;padding:0;border:1px solid transparent;border-image-slice:12;border-image-width:4.65% 2.61%;border-image-repeat:stretch;pointer-events:none}
+.card-lightbox>.photo-preview-image{max-width:86vw}
 
 /* Shared rounded dropdowns for the collaboration and update filters. */
 .filterbar select,.work-page select,.work-editor select{

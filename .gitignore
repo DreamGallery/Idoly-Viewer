@@ -29,6 +29,9 @@ public/audio
 public/images/*
 !public/images/background/
 !public/images/card-filters/
+!public/images/photos/
+public/images/photos/*
+!public/images/photos/photo_frame_5.png
 
 # Credentials and private machine configuration (examples are safe to commit)
 .env*

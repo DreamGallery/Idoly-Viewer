@@ -50,10 +50,14 @@ class PublicMediaTests(unittest.TestCase):
             'media/video/card.mp4': 'video',
             'media/image/cover.webp': 'cover',
             'web/images/icon.png': 'icon',
+            'web/images/characters/chibi/szk.png': 'chibi',
+            'web/images/groups/character_group_1.png': 'group',
+            'web/images/card-filters/icon_sp.png': 'filter',
+            'web/images/photos/photo_frame_5.png': 'frame',
             'web/catalog/chapters/adv_test.json': json.dumps({'csv_path': 'card/adv_test.csv', 'label': '人工校对稿'}),
             'web/data/catalog.json': json.dumps({'image': '/images/icon.png'}),
             'web/data/music.json': json.dumps({'tracks': [{'audio': '/api/media/voice/voice.flac', 'cover': '/api/media/image/cover.webp'}]}),
-            'web/data/directory.json': json.dumps({'videos': [{'url': '/api/media/video/card.mp4', 'poster': '/api/media/image/cover.webp'}], 'source': '/api/original/adv_test', 'external': 'https://official.test/image.png'}),
+            'web/data/directory.json': json.dumps({'images':[{'url':'/api/media/image/cover.webp','frame_url':'/images/photos/photo_frame_5.png'}], 'videos': [{'url': '/api/media/video/card.mp4', 'poster': '/api/media/image/cover.webp'}], 'source': '/api/original/adv_test', 'external': 'https://official.test/image.png'}),
             'web/data/media/adv_test.json': json.dumps({'voices': {'lines': [{'clips': [{'url': '/api/media/voice/voice.flac'}]}]}}),
             'web/data/stories/adv_test.json': json.dumps({'id': 'adv_test', 'originalTitle': '原題', 'title': 'PRIVATE_TITLE', 'rows': [{'id': '1:text:1', 'name': 'A', 'text': '原文', 'trans': 'PRIVATE_TRANSLATION'}]}),
         }
@@ -72,6 +76,7 @@ class PublicMediaTests(unittest.TestCase):
             self.assertEqual(song['audio'], 'https://media.example.test/existing/prefix/'+files['media/voice/voice.flac'])
             self.assertEqual(song['cover'], 'https://media.example.test/existing/prefix/'+files['media/image/cover.webp'])
             listing = json.loads(read('web/data/directory.json'))
+            self.assertEqual(listing['images'][0]['frame_url'], 'https://media.example.test/existing/prefix/'+files['web/images/photos/photo_frame_5.png'])
             self.assertEqual(listing['videos'][0]['url'], 'https://media.example.test/existing/prefix/'+files['media/video/card.mp4'])
             self.assertEqual(listing['source'], '/api/original/adv_test')
             self.assertEqual(listing['external'], 'https://official.test/image.png')
@@ -96,6 +101,24 @@ class PublicMediaTests(unittest.TestCase):
             stage = self.fixture(Path(directory));files, jobs = snapshot_plan(stage)
             library = json.loads(jobs[files['web/data/music.json']][0].read_text())
             self.assertEqual(library['tracks'][0]['audio'], '/'+files['media/voice/voice.flac'])
+
+    def test_filter_image_urls_change_only_when_image_content_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            first=self.fixture(root/'first');second=self.fixture(root/'second')
+            (second/'web/data/catalog.json').write_text('{"revision":"new-index"}')
+            def urls(stage):
+                files,jobs=snapshot_plan(stage,public_base='https://media.example.test')
+                return json.loads(jobs[files['web/data/catalog.json']][0].read_text())['filterImages']
+            original=urls(first)
+            self.assertEqual(urls(second),original)
+            self.assertEqual(len(original),3)
+            self.assertTrue(all('/media/' in value and 'release=' not in value for value in original.values()))
+            (second/'web/images/characters/chibi/szk.png').write_text('updated chibi')
+            changed=urls(second)
+            self.assertNotEqual(changed['/images/characters/chibi/szk.png'],original['/images/characters/chibi/szk.png'])
+            for path in ['/images/groups/character_group_1.png','/images/card-filters/icon_sp.png']:
+                self.assertEqual(changed[path],original[path])
 
     def test_invalid_media_origin_is_rejected_before_any_publication(self):
         for value in ['http://media.test', 'https://user:secret@media.test', 'https://media.test/prefix', 'https://media.test?token=secret', 'https://media.test/#fragment', 'https://media.test:bad', 'https://media.test\\path']:

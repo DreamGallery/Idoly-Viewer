@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 import unittest
-from idoly_story_index.build import voice_links, timing, event_sort_time, birthday_group_label
-from idoly_story_index.card_traits import card_traits
+from idoly_story_index.build import voice_links, timing, event_sort_time, birthday_group_label, birthday_photos, card_cover_reference
+from idoly_story_index.card_traits import card_traits, is_birthday_card
 from idoly_story_index.translation_status import translation_status
 from idoly_story_index.exclusions import confirmed_exclusions
 from idoly_story_index.index_visibility import is_indexed_story
@@ -21,11 +21,42 @@ class BirthdayLabelTest(unittest.TestCase):
 class CardTraitsTest(unittest.TestCase):
     def test_sp_skill_does_not_replace_support_role(self):
         card={'type':3,'vocalRatioPermil':430,'danceRatioPermil':300,'visualRatioPermil':270,'skillId1':'sp','skillId2':'a'}
-        self.assertEqual(card_traits(card,{'sp':{'categoryType':1},'a':{'categoryType':2}}),{'attribute':'vocal','role':'supporter','hasSp':True})
+        self.assertEqual(card_traits(card,{'sp':{'categoryType':1},'a':{'categoryType':2}}),{'attribute':'vocal','role':'supporter','hasSp':True,'isBirthday':False})
 
     def test_tied_parameters_and_missing_skill_are_not_guessed(self):
         card={'type':2,'vocalRatioPermil':400,'danceRatioPermil':400,'visualRatioPermil':200,'skillId1':'missing'}
-        self.assertEqual(card_traits(card,{}),{'attribute':None,'role':'buffer','hasSp':False})
+        self.assertEqual(card_traits(card,{}),{'attribute':None,'role':'buffer','hasSp':False,'isBirthday':False})
+
+    def test_birthday_cards_use_asset_family_not_translated_names(self):
+        self.assertTrue(is_birthday_card({'assetId':'szk-05-birt-03','name':'dear precious 雫'}))
+        self.assertFalse(is_birthday_card({'assetId':'szk-05-casl-00','name':'生日礼物'}))
+        self.assertFalse(is_birthday_card({}))
+
+class BirthdayPhotosTest(unittest.TestCase):
+    def test_memorial_photos_require_master_ownership_and_available_art(self):
+        def photo(year,character='szk'):
+            asset=f'phot-birthday-{year}-1015-{character}'
+            return {'id':asset,'assetId':asset,'focusCharacterId':'char-'+character,'rarity':5}
+        old,current,missing,removed,other=photo(23),photo(24),photo(25),photo(26),photo(24,'mna')
+        ordinary={**photo(24),'id':'phot-ordinary','assetId':'phot-ordinary','name':'生日纪念'}
+        ownerless={**photo(27),'focusCharacterId':''}
+        assets={'img_photo_full_'+row['assetId']:{} for row in [old,current,other,ordinary,ownerless]}
+        assets['img_photo_full_'+removed['assetId']]={'state':4}
+        result=birthday_photos([missing,current,old,removed,other,ordinary,ownerless],assets)
+        self.assertEqual(result,{'char-szk':current,'char-mna':other})
+
+class CardCoverReferenceTest(unittest.TestCase):
+    def test_later_chapter_can_identify_unmapped_card_cover(self):
+        group={'id':'adv_card_ski_54','stories':['adv_card_ski_54_01','adv_card_ski_54_03']}
+        asset='img_card_full_1_ski-05-birt-03'
+        media={group['stories'][0]:{'images':[{'asset':'img_card_full_1_szk-05-birt-03'}]},
+               group['stories'][1]:{'images':[{'asset':asset}]}}
+        self.assertEqual(card_cover_reference(group,media),
+                         {'kind':'script-reference','scripts':['adv_card_ski_54_03'],'asset':asset})
+        media[group['stories'][0]]['images'].append({'asset':'img_card_full_1_ski-05-birt-02'})
+        self.assertIsNone(card_cover_reference(group,media),'Ambiguous card art must not be guessed')
+        self.assertIsNone(card_cover_reference({**group,'id':'card-ski-05-birt-03'},media),
+                          'MasterDB artwork takes precedence over script references')
 
 class IndexVisibilityTest(unittest.TestCase):
     def test_main_prologue_requires_a_resolved_master_chapter(self):
@@ -186,17 +217,6 @@ class DirectorySnapshotTest(unittest.TestCase):
         self.assertTrue(all(not update_by_id[sid]['pending'] for sid in supplements))
         self.assertEqual(self.nodes['adv_event_2505_01']['parent'],'event:normal')
 
-    def test_unmapped_card_cover_uses_explicit_reference_from_later_chapter(self):
-        group=self.nodes['adv_card_ski_54']
-        asset='img_card_full_1_ski-05-birt-03'
-        self.assertEqual(group['images'][0]['asset'],asset)
-        self.assertEqual(group['coverSource']['scripts'],['adv_card_ski_54_03'])
-        self.assertIsNone(next(s for s in self.catalog['stories'] if s['id']=='adv_card_ski_54_01')['masterId'])
-        updates=json.loads((ROOT/'public/data/updates.json').read_text())
-        rows=[row for row in updates['items'] if row['group_id']==group['id']]
-        self.assertEqual(len(rows),3)
-        self.assertTrue(all(row['pending'] and row['images'][0]['asset']==asset for row in rows))
-
     def test_tokyo_prologue_stays_first_in_its_resolved_chapter(self):
         sid='adv_main_02_01_00'
         entry=self.directory['stories'][sid]
@@ -247,6 +267,24 @@ class DirectorySnapshotTest(unittest.TestCase):
                 prefix='img_story_parttop_' if category=='main' else 'img_story_partthumb_'
                 self.assertTrue(image['asset'].startswith(prefix))
                 self.assertEqual(image['aspect_ratio'],4/3 if category=='main' else 1)
+
+    def test_birthday_groups_have_one_memorial_photo_without_date_label(self):
+        plan=json.loads((ROOT/'public/data/media-plan.json').read_text())
+        for key in self.nodes['hbd']['children']:
+            node=self.nodes[key]
+            self.assertNotIn('birthday',node)
+            self.assertEqual(len(node['images']),1)
+            self.assertFalse(node.get('portraitCover'))
+            self.assertEqual(node['coverSource']['kind'],'birthday-photo')
+            asset_id=node['coverSource']['photoId']
+            self.assertTrue(asset_id.startswith('phot-birthday-'))
+            self.assertEqual(node['images'][0]['asset'],'img_photo_full_'+asset_id)
+            self.assertIn(node['images'][0]['asset'],plan['images'])
+            self.assertEqual(node['images'][0]['aspect_ratio'],16/9)
+            self.assertTrue((ROOT/'public'/node['images'][0]['frame_url'].lstrip('/')).is_file())
+            bond=self.nodes.get('bond:'+key.removeprefix('hbd:'))
+            if bond:
+                self.assertTrue(bond['portraitCover'])
 
     def test_event_covers_use_available_landscape_banner(self):
         manifest=json.loads((ROOT.parent/'HoshimiToolkit/cache/OctoManifest.json').read_text())

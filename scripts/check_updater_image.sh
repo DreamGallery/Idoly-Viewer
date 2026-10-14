@@ -17,6 +17,10 @@ subprocess.run(['ffprobe','-version'],check=True,stdout=subprocess.DEVNULL)
 assert pathlib.Path('/app/scripts/build-idoly-data.py').is_file()
 for name in ('image-assets.json', 'character-portraits.json'):
     assert json.loads((pathlib.Path('/app/deploy/docker')/name).read_text()), 'Missing deployment resource map: '+name
+assert 'PhotoAllInOne' in importlib.import_module('idoly_story_index.master_source').TABLES, 'Birthday photo MasterDB table missing'
+from PIL import Image
+with Image.open('/app/public/images/photos/photo_frame_5.png') as frame:
+    frame.verify()
 assert not list(pathlib.Path('/app').glob('.env*')), 'Unexpected environment file in image'
 assert not pathlib.Path('/app/data').exists(), 'Downloaded assets must not be bundled'
 assert not list(pathlib.Path('/app').rglob('config.ini')), 'Unexpected private toolkit config'

@@ -17,11 +17,26 @@ test('attribute, role, and SP combine independently',()=>{
 });
 
 test('evolution filter intersects other traits and excludes unknown cards',()=>{
- const filter={...defaultCardFilters,evolutionOnly:true};
+ const filter={...defaultCardFilters,special:'evolution' as const};
  const card:CardTraits={attribute:'vocal',role:'scorer',hasSp:true,hasEvolution:true};
  assert.equal(matchesCardFilters(card,filter),true);
  assert.equal(matchesCardFilters({...card,hasEvolution:false},filter),false);
  assert.equal(matchesCardFilters(undefined,filter),false);
  assert.equal(matchesCardFilters(card,{...filter,attribute:'dance'}),false);
  assert.equal(matchesCardFilters(card,{...filter,spOnly:true}),true);
+});
+
+test('birthday and evolution are separate special choices and combine with other traits',()=>{
+ const birthday:CardTraits={attribute:'visual',role:'buffer',hasSp:true,isBirthday:true,hasEvolution:false};
+ const evolution:CardTraits={...birthday,isBirthday:false,hasEvolution:true};
+ const filter={...defaultCardFilters,special:'birthday' as const};
+ assert.equal(matchesCardFilters(birthday,filter),true);
+ assert.equal(matchesCardFilters(evolution,filter),false);
+ assert.equal(matchesCardFilters(undefined,filter),false);
+ assert.equal(matchesCardFilters(birthday,{...filter,attribute:'visual',spOnly:true}),true);
+ assert.equal(matchesCardFilters(birthday,{...filter,role:'scorer'}),false);
+ assert.equal(matchesCardFilters(birthday,{...filter,special:'evolution'}),false);
+ assert.equal(matchesCardFilters(evolution,{...filter,special:'evolution'}),true);
+ assert.equal(matchesCardFilters(birthday,defaultCardFilters),true);
+ assert.equal(matchesCardFilters(evolution,defaultCardFilters),true);
 });

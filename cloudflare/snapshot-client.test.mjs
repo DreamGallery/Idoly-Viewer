@@ -16,6 +16,8 @@ test('browser pins nested media and later data/source requests while preserving 
  assert.equal(first.image,'/images/a.png?release=first');assert.equal(first.voices[0].url,'/api/media/voice/a.wav?release=first');assert.equal(first.remote,'https://example.com/a.png');
  const direct='https://media.example.test/idoly-v1/media/'+'a'.repeat(64)+'/voice.flac';
  assert.deepEqual(client.snapshotJson({audio:direct,video:'/media/'+'b'.repeat(64)+'/card.mp4'}),{audio:direct,video:'/media/'+'b'.repeat(64)+'/card.mp4'});
+ const filterImages={'/images/characters/chibi/szk.png':'/media/'+'c'.repeat(64)+'/szk.png','/images/groups/character_group_1.png':'https://media.example.test/idoly-v1/media/'+'d'.repeat(64)+'/character_group_1.png'};
+ assert.deepEqual(client.snapshotJson({filterImages}),{filterImages},'filter artwork keeps content-addressed URLs while the index follows its snapshot');
  assert.equal(client.resourceCatalogBase(),'/catalog/releases/first');
  assert.equal(client.resourceUrl('/api/source/demo'),'/api/source/demo?release=first');assert.equal(client.resourceUrl('/api/github/read'),'/api/github/read');
  assert.equal(client.resourceUrl('/api/original/demo'),'/api/original/demo?release=first');

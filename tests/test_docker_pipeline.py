@@ -28,7 +28,8 @@ class MasterTests(unittest.TestCase):
         tables,version=artifact_tables(self.artifact())
         self.assertEqual(set(tables),set(TABLES));self.assertEqual(version,'version-id')
     def test_incomplete_artifact_rejected(self):
-        with self.assertRaises(ValueError):artifact_tables(self.artifact('Story'))
+        for missing in ('Story','PhotoAllInOne'):
+            with self.subTest(table=missing), self.assertRaises(ValueError):artifact_tables(self.artifact(missing))
     def test_compressed_json_supported_and_schema_checked(self):
         self.assertEqual(json.loads(unpack_table('Reward.json.gz',gzip.compress(b'[{"id":1}]'))),[{'id':1}])
         with self.assertRaises(ValueError):unpack_table('Story.json',b'{}')

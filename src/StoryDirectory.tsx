@@ -8,7 +8,7 @@ import { isTextOnlyStoryGroup } from './story-presentation';
 import ListPagination from './ListPagination';
 
 export type SortOrder = 'default' | 'newest' | 'oldest';
-export type MediaImage = { url: string; label: string; asset?: string; aspect_ratio?: number };
+export type MediaImage = { url: string; label: string; asset?: string; aspect_ratio?: number; frame_url?: string };
 type DirectoryNode = { id: string; label: string; parent: string | null; children: string[]; stories: string[]; count: number; sortTime?: number | null; cardTraits?: CardTraits; images: MediaImage[]; videos?: CardVideo[]; portraitCover?: boolean };
 export type Directory = { roots: string[]; nodes: Record<string, DirectoryNode>; stories: Record<string, {group:string;images:MediaImage[];voiceLines:number;indexVisible:boolean}> };
 const cardPageSize = 24;

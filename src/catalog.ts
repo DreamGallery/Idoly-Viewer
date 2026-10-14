@@ -48,7 +48,7 @@ export interface Entry {
   support_rarity?: string | null;
   support_attribute?: string | null;
   group_image: string | null;
-  group_images?: { url: string; label: string; aspect_ratio?: number | null; preview_crop?: string | null }[];
+  group_images?: { url: string; label: string; aspect_ratio?: number | null; preview_crop?: string | null; frame_url?: string }[];
   text_status: string;
   line_count: number;
 }

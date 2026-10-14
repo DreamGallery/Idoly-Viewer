@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Users } from 'lucide-react';
+import { Cake, Users } from 'lucide-react';
 import { attributeOptions, roleOptions, defaultCardFilters, type CardFilters } from './card-filters';
 import type { Catalog } from './idoly-types';
 import type { Directory } from './StoryDirectory';
@@ -18,36 +18,41 @@ export default function CharacterFilter({ data, directory, group, character, onG
  }, [data,directory]);
  const groups = data.groups.filter(g=>available.some(c=>c.group===g.id)).sort((a,b)=>Number(colorGroupIcons.has(b.id))-Number(colorGroupIcons.has(a.id)));
  const characters = available.filter(c => group === 'all' || c.group === group);
- const active=cardFilters.attribute!=='all'||cardFilters.role!=='all'||cardFilters.spOnly||cardFilters.evolutionOnly;
+ const active=cardFilters.attribute!=='all'||cardFilters.role!=='all'||cardFilters.spOnly||cardFilters.special!=='all';
+ const imageUrl=(path:string)=>data.filterImages?.[path]||resourceUrl(path);
  return <section className="card-character-filter" aria-label="卡牌剧情角色筛选">
   <div className="character-group-options" role="group" aria-label="筛选组合">
    <button aria-pressed={group==='all'} onClick={()=>onGroupChange('all')}>全部组合</button>
-   {groups.map(g=><button key={g.id} className="character-group-logo" aria-label={g.name} aria-pressed={group===g.id} onClick={()=>onGroupChange(g.id)}>{colorGroupIcons.has(g.id)?<img src={resourceUrl('/images/groups/color/'+g.id+'.png')} alt=""/>:<span className={g.id==='character_group_mku'?'group-logo-miku':undefined} aria-hidden="true" style={{color:/^[0-9a-f]{6}$/i.test(g.color)?'#'+g.color:undefined,maskImage:`url(${resourceUrl('/images/groups/'+g.id+'.png')})`,WebkitMaskImage:`url(${resourceUrl('/images/groups/'+g.id+'.png')})`}}/>}</button>)}
+   {groups.map(g=><button key={g.id} className="character-group-logo" aria-label={g.name} aria-pressed={group===g.id} onClick={()=>onGroupChange(g.id)}>{colorGroupIcons.has(g.id)?<img src={imageUrl('/images/groups/color/'+g.id+'.png')} alt=""/>:<span className={g.id==='character_group_mku'?'group-logo-miku':undefined} aria-hidden="true" style={{color:/^[0-9a-f]{6}$/i.test(g.color)?'#'+g.color:undefined,maskImage:`url(${imageUrl('/images/groups/'+g.id+'.png')})`,WebkitMaskImage:`url(${imageUrl('/images/groups/'+g.id+'.png')})`}}/>}</button>)}
   </div>
   <div className="chibi-character-options" role="group" aria-label="筛选角色">
    <button className="chibi-character" aria-pressed={!character} onClick={()=>onCharacterChange('')}><span className="chibi-avatar chibi-all"><Users size={27}/></span><span>全部角色</span></button>
    {characters.map(c=><button key={c.id} className="chibi-character" aria-pressed={character===c.id} onClick={()=>onCharacterChange(c.id)}>
-    <span className="chibi-avatar"><img src={resourceUrl('/images/characters/chibi/'+c.id+'.png')} alt="" loading="lazy"/></span>
+    <span className="chibi-avatar"><img src={imageUrl('/images/characters/chibi/'+c.id+'.png')} alt="" loading="lazy"/></span>
     <span>{c.name}</span>
    </button>)}
   </div>
   <div className="card-trait-filters" role="group" aria-label="卡牌花色与类型筛选">
    <div className="card-trait-options" role="group" aria-label="花色">
     <span className="card-trait-label">花色</span>
-    {attributeOptions.filter(([key])=>key!=='all').map(([key,label])=><button key={key} className={'card-trait-icon trait-'+key} aria-label={label} aria-pressed={cardFilters.attribute===key} onClick={()=>onCardFiltersChange({...cardFilters,attribute:cardFilters.attribute===key?'all':key})}><GameFilterIcon name={'parameter_'+key}/></button>)}
+    {attributeOptions.filter(([key])=>key!=='all').map(([key,label])=><button key={key} className={'card-trait-icon trait-'+key} aria-label={label} aria-pressed={cardFilters.attribute===key} onClick={()=>onCardFiltersChange({...cardFilters,attribute:cardFilters.attribute===key?'all':key})}><GameFilterIcon src={imageUrl('/images/card-filters/icon_parameter_'+key+'.png')}/></button>)}
    </div>
    <div className="card-trait-options" role="group" aria-label="类型">
     <span className="card-trait-label">类型</span>
-    {roleOptions.filter(([key])=>key!=='all').map(([key,label])=><button key={key} className={'card-trait-icon role-'+key} aria-label={label} aria-pressed={cardFilters.role===key} onClick={()=>onCardFiltersChange({...cardFilters,role:cardFilters.role===key?'all':key})}><img className="game-filter-image" src={resourceUrl('/images/card-filters/icon_'+key+'_thumbnail.png')} alt=""/></button>)}
+    {roleOptions.filter(([key])=>key!=='all').map(([key,label])=><button key={key} className={'card-trait-icon role-'+key} aria-label={label} aria-pressed={cardFilters.role===key} onClick={()=>onCardFiltersChange({...cardFilters,role:cardFilters.role===key?'all':key})}><img className="game-filter-image" src={imageUrl('/images/card-filters/icon_'+key+'_thumbnail.png')} alt=""/></button>)}
    </div>
-   <button className="card-trait-icon card-sp-filter" aria-label="含 SP 技能" aria-pressed={cardFilters.spOnly} onClick={()=>onCardFiltersChange({...cardFilters,spOnly:!cardFilters.spOnly})}><GameFilterIcon name="sp"/></button>
-   <button className="card-trait-icon" aria-label="可觉醒卡牌" aria-pressed={cardFilters.evolutionOnly} onClick={()=>onCardFiltersChange({...cardFilters,evolutionOnly:!cardFilters.evolutionOnly})}><img className="game-filter-image" src={resourceUrl('/images/card-filters/icon_after_evolution.png')} alt=""/></button>
+   <button className="card-trait-icon card-sp-filter" aria-label="含 SP 技能" aria-pressed={cardFilters.spOnly} onClick={()=>onCardFiltersChange({...cardFilters,spOnly:!cardFilters.spOnly})}><GameFilterIcon src={imageUrl('/images/card-filters/icon_sp.png')}/></button>
+   <div className="card-trait-options" role="group" aria-label="特殊卡牌">
+    <span className="card-trait-label">特殊</span>
+    <button className="card-trait-icon" aria-label="可觉醒卡牌" aria-pressed={cardFilters.special==='evolution'} onClick={()=>onCardFiltersChange({...cardFilters,special:cardFilters.special==='evolution'?'all':'evolution'})}><img className="game-filter-image" src={imageUrl('/images/card-filters/icon_after_evolution.png')} alt=""/></button>
+    <button className="card-trait-icon" aria-label="生日卡牌" aria-pressed={cardFilters.special==='birthday'} onClick={()=>onCardFiltersChange({...cardFilters,special:cardFilters.special==='birthday'?'all':'birthday'})}><Cake strokeWidth={1.6} aria-hidden="true"/></button>
+   </div>
    {active&&<button className="card-trait-reset" onClick={()=>onCardFiltersChange(defaultCardFilters)}>重置卡牌筛选</button>}
   </div>
  </section>;
 }
 
-function GameFilterIcon({name}:{name:string}) {
- const url=`url(${resourceUrl('/images/card-filters/icon_'+name+'.png')})`;
+function GameFilterIcon({src}:{src:string}) {
+ const url=`url(${src})`;
  return <span className="game-filter-icon" aria-hidden="true" style={{maskImage:url,WebkitMaskImage:url}}/>;
 }

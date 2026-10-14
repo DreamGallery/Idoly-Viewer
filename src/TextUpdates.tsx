@@ -8,7 +8,7 @@ import { groupUpdates, textUpdateView, type TextUpdate } from './text-updates';
 import { isTextOnlyStoryGroup } from './story-presentation';
 import ListPagination from './ListPagination';
 
-type Updates = { items: TextUpdate[]; source_commit: string; translation_commit: string; pending_count: number };
+type Updates = { items: TextUpdate[]; source_commit: string; pending_count: number };
 const dateFormat = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeZone: 'Asia/Shanghai' });
 const normalize = (text: string) => text.normalize('NFKC').replace(/\s/g, '').toLocaleLowerCase();
 const pageSize = 24;

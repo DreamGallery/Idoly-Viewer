@@ -37,6 +37,35 @@ def birthday_group_label(kind, sequence, master_name):
     return year[1]+'年' if year else '偶像生日 · '+sequence
 
 
+def birthday_photos(photos, assets):
+    """Bind available birthday memorial photos through MasterDB ownership."""
+    result = {}
+    # The asset family contains the original birthday date in YY-MMDD order.
+    for photo in sorted(photos, key=lambda row: row['assetId']):
+        asset = 'img_photo_full_' + photo['assetId']
+        if (re.fullmatch(r'phot-birthday-\d{2}-\d{4}-[a-z]+', photo['assetId'])
+                and photo.get('focusCharacterId') and asset in assets and assets[asset].get('state') != 4):
+            result[photo['focusCharacterId']] = photo
+    return result
+
+
+def card_cover_reference(group, story_media):
+    """Use an unambiguous illustration of the card's owner from its scripts."""
+    if not group['id'].startswith('adv_card_'):
+        return None
+    owner = group['id'].split('_')[2]
+    references = {}
+    for sid in group['stories']:
+        for image in story_media[sid]['images']:
+            asset = image.get('asset', '')
+            if asset.startswith('img_card_full_1_' + owner + '-'):
+                references.setdefault(asset, []).append(sid)
+    if len(references) == 1:
+        asset, scripts = next(iter(references.items()))
+        return {'kind':'script-reference', 'scripts':scripts, 'asset':asset}
+    return None
+
+
 def event_sort_time(story_ids):
     """Original story month, not the date of a later permanent/rerun release."""
     months = []
@@ -122,7 +151,7 @@ def build(master, toolkit, source, translations, output, report=ROOT/'reports/id
     assets = {x['name']: x for x in octo['assetBundleList']}
     resources = {x['name']:x for x in octo['resourceList']}
     used_videos = {}
-    tables = {n: load(master/(n+'.json')) for n in ['Story', 'StoryPart', 'EventStory', 'ExtraStory', 'LoveStoryEpisode', 'Card', 'CardEvolution', 'Character', 'Skill']}
+    tables = {n: load(master/(n+'.json')) for n in ['Story', 'StoryPart', 'EventStory', 'ExtraStory', 'LoveStoryEpisode', 'Card', 'CardEvolution', 'Character', 'Skill', 'PhotoAllInOne']}
     evolving_cards = {row['cardId'] for row in tables['CardEvolution']}
     localized = {n: load(translations/'master/zh-Hans'/(n+'.json')) if (translations/'master/zh-Hans'/(n+'.json')).exists() else {} for n in tables}
     def title(n, row, field='name'):
@@ -140,7 +169,7 @@ def build(master, toolkit, source, translations, output, report=ROOT/'reports/id
     used_images = set()
     def image_info(asset, label):
         used_images.add(asset)
-        ratio = 16/9 if asset.startswith('img_card_full_') else 4/3 if asset.startswith('img_story_parttop_') else 1 if asset.startswith('img_story_partthumb_') else 3 if asset.startswith(('img_story_event_banner_', 'img_banner_l_')) else None
+        ratio = 16/9 if asset.startswith(('img_card_full_', 'img_photo_full_phot-birthday-')) else 4/3 if asset.startswith('img_story_parttop_') else 1 if asset.startswith('img_story_partthumb_') else 3 if asset.startswith(('img_story_event_banner_', 'img_banner_l_')) else None
         return {'asset':asset, 'url':'/api/media/image/'+asset+'.webp', 'label':label, 'aspect_ratio':ratio}
     for key, label in categories.items():
         cover={'main':'img_story_top_main','group':'img_story_top_group','bond':'img_story_top_ex','card':'img_story_top_card','event':'img_story_top_sp','hbd':'img_story_parttop_birthday-01'}[key]
@@ -190,10 +219,18 @@ def build(master, toolkit, source, translations, output, report=ROOT/'reports/id
             card_by_story[ep['storyId']] = card
             owner_by_story[ep['storyId']]=next((c['assetId'] for c in tables['Character'] if c['id']==card['characterId']),card['characterId'].removeprefix('char-'))
     love_by_story = {ep['storyId']:ep for ep in tables['LoveStoryEpisode']}
+    photos_by_character = birthday_photos(tables['PhotoAllInOne'], assets)
     for category in ['bond', 'card', 'hbd']:
         for c in catalog['characters']:
             k=node(category+':'+c['id'], c['name'], category)
-            if category in ['bond','hbd'] and c['id'] in portraits:
+            photo = photos_by_character.get('char-'+c['id'])
+            if category == 'hbd' and photo:
+                image = image_info('img_photo_full_'+photo['assetId'], '生日纪念图')
+                if photo.get('rarity') == 5:
+                    image['frame_url'] = '/images/photos/photo_frame_5.png'
+                nodes[k]['images'] = [image]
+                nodes[k]['coverSource'] = {'kind':'birthday-photo', 'photoId':photo['id']}
+            elif category == 'bond' and c['id'] in portraits:
                 nodes[k]['images']=[{'url':image['url'],'label':c['name']+'·'+image['label']} for image in portraits[c['id']]['images']]
                 nodes[k]['portraitCover']=True
             elif c['image']:
@@ -308,20 +345,11 @@ def build(master, toolkit, source, translations, output, report=ROOT/'reports/id
         counts['storiesWithVoice']+=bool(voice)
     # A missing Card/Story row does not mean the artwork is missing. Only use
     # an unambiguous card illustration explicitly referenced by this story group.
-    for key, group in nodes.items():
-        if not key.startswith('adv_card_'):
-            continue
-        owner = key.split('_')[2]
-        references = {}
-        for sid in group['stories']:
-            for image in story_media[sid]['images']:
-                asset = image.get('asset', '')
-                if asset.startswith('img_card_full_1_' + owner + '-'):
-                    references.setdefault(asset, []).append(sid)
-        if len(references) == 1:
-            asset, scripts = next(iter(references.items()))
-            group['images'] = [image_info(asset, '卡面')]
-            group['coverSource'] = {'kind':'script-reference', 'scripts':scripts, 'asset':asset}
+    for group in nodes.values():
+        reference = card_cover_reference(group, story_media)
+        if reference:
+            group['images'] = [image_info(reference['asset'], '卡面')]
+            group['coverSource'] = reference
     # Prune empty master groups without losing any CSV-only entries.
     def prune(key):
         n=nodes[key];n['children']=[k for k in n['children'] if prune(k)]
@@ -343,7 +371,7 @@ def build(master, toolkit, source, translations, output, report=ROOT/'reports/id
     assert sum(len(n['stories']) for n in active.values())==len(catalog['stories'])
     provenance={'masterTables':{n:hashlib.sha256((master/(n+'.json')).read_bytes()).hexdigest() for n in tables},'catalogSha256':hashlib.sha256((output/'catalog.json').read_bytes()).hexdigest(),'manifestSha256':hashlib.sha256((toolkit/'cache/OctoManifest.json').read_bytes()).hexdigest()}
     save(output/'directory.json',{'provenance':provenance,'roots':list(categories),'nodes':active,'stories':story_media,'stats':dict(counts),'revision':octo['revision']})
-    save(output/'updates.json',build_updates(source,translations,catalog,active,story_media,history_cache))
+    save(output/'updates.json',build_updates(source,catalog,active,story_media,history_cache))
     selected=used_images|set(voice_plan.values())
     selected_assets={k:assets[k] for k in sorted(selected)}
     selected_assets.update({k:resources[k] for k in used_videos.values()})

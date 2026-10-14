@@ -50,3 +50,5 @@
 !public/images/background/**
 !public/images/card-filters/
 !public/images/card-filters/**
+!public/images/photos/
+!public/images/photos/photo_frame_5.png
