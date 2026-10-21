@@ -1,7 +1,15 @@
-# Build only the audio tools used by the updater; compilers stay in this stage.
-FROM python:3.12-slim-bookworm AS audio-tools
+FROM python:3.12-slim-bookworm AS python-base
 ARG DEBIAN_MIRROR=https://deb.debian.org
-RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources && apt-get -o Acquire::Retries=3 update && apt-get -o Acquire::Retries=3 install -y --no-install-recommends build-essential pkg-config nasm curl xz-utils ca-certificates libmp3lame-dev && rm -rf /var/lib/apt/lists/*
+ARG PIP_INDEX_URL=https://pypi.org/simple
+RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 update \
+    && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN python -m pip install --no-cache-dir --index-url "$PIP_INDEX_URL" --upgrade pip
+
+# Build only the audio tools used by the updater; compilers stay in this stage.
+FROM python-base AS audio-tools
+RUN apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 update && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 install -y --no-install-recommends build-essential pkg-config nasm curl xz-utils libmp3lame-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 # Official upstream archive, pinned and checked before extraction.
 RUN curl --fail --location --retry 3 https://ffmpeg.org/releases/ffmpeg-5.1.9.tar.xz -o ffmpeg.tar.xz && echo "d9b593bb2ba93d4b50f74177e0cdcd41747e708596367deed0c30348a71dd176  ffmpeg.tar.xz" | sha256sum -c - && tar -xf ffmpeg.tar.xz
@@ -16,15 +24,13 @@ RUN ./configure --prefix=/opt/audio-tools --disable-everything --disable-autodet
     --enable-filter=aresample,aformat,anull && make -j4 && make install
 RUN mkdir -p /opt/audio-tools/share/doc/ffmpeg && cp COPYING.LGPLv2.1 LICENSE.md /opt/audio-tools/share/doc/ffmpeg/ && cp ffbuild/config.log /opt/audio-tools/share/doc/ffmpeg/build-config.log && cp /build/ffmpeg.tar.xz /opt/audio-tools/share/doc/ffmpeg/ffmpeg-5.1.9.tar.xz
 
-FROM python:3.12-slim-bookworm
-ARG DEBIAN_MIRROR=https://deb.debian.org
-RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 update && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 install -y --no-install-recommends git ca-certificates libstdc++6 flac libmp3lame0 && rm -rf /var/lib/apt/lists/*
+FROM python-base
+RUN apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 update && apt-get -o Acquire::Retries=3 -o Acquire::https::Timeout=30 install -y --no-install-recommends git libstdc++6 flac libmp3lame0 && rm -rf /var/lib/apt/lists/*
 COPY --from=audio-tools /opt/audio-tools/bin/ /usr/local/bin/
 COPY --from=audio-tools /opt/audio-tools/share/ /usr/local/share/
 WORKDIR /app
 COPY requirements.txt requirements-audio.txt requirements-assets.txt requirements-r2.txt ./
-ARG PIP_INDEX_URL=https://pypi.org/simple
-RUN pip install --no-cache-dir --index-url "$PIP_INDEX_URL" -r requirements-r2.txt
+RUN python -m pip install --no-cache-dir --upgrade --index-url "$PIP_INDEX_URL" -r requirements-r2.txt
 COPY idoly_story_index ./idoly_story_index
 COPY vendor/hoshimi ./vendor/hoshimi
 COPY scripts/build-idoly-data.py ./scripts/build-idoly-data.py

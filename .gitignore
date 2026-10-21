@@ -93,6 +93,7 @@ blob-report/
 
 .prototype/
 .local/
+.agent-local/
 public/data/
 public/catalog/
 public/images/characters/
