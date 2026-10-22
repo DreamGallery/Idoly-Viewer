@@ -109,6 +109,20 @@ test('completing an identical draft still removes the draft atomically',async()=
 });
 
 test('editor line breaks serialize as literal backslash-n without changing source',()=>{assert.equal(csvText('甲\n乙\r\n丙'), '甲\\n乙\\n丙');assert.equal(editorText('甲\\n乙'), '甲\n乙');const d=extractInfoFromCsvText(csv);d.data[0].trans='甲\n乙';const out=extractInfoFromCsvText(toCsvText(d));assert.equal(out.data[0].trans,'甲\\n乙');assert.equal(out.data[0].text,d.data[0].text);});
+test('browser drafts preserve new lines while submission and counts omit trailing blank lines',()=>{
+ assert.equal(csvText('甲\n'),'甲\\n');
+ assert.deepEqual(lineLengths(csvText('甲\n')),[1]);
+ const d=extractInfoFromCsvText(csv);
+ for(const value of ['甲\n','甲\\n\\n','甲\r\n \t\r\n']){
+  d.data[0].trans=value;
+  assert.equal(extractInfoFromCsvText(toCsvText(d)).data[0].trans,csvText(value));
+  const serialized=toCsvText(d,{stripTrailingBreaks:true});
+  assert.equal(extractInfoFromCsvText(serialized).data[0].trans,'甲');
+  assert.equal(d.data[0].trans,value);
+ }
+ d.data[0].trans='甲\n乙\n';
+ assert.equal(extractInfoFromCsvText(toCsvText(d,{stripTrailingBreaks:true})).data[0].trans,'甲\\n乙');
+});
 test('length limit excludes formatting and ruby annotations, counts punctuation and Unicode',()=>{assert.deepEqual(lineLengths('<em\\=>文字</em>『<r\\=Prima Stella>启明星</r>』\\n你好！'),[7,3]);assert.equal(longLines([{text:'原\\n文',trans:'字'.repeat(21)}]).length,0);assert.deepEqual(longLines([{text:'原\\n文',trans:'字'.repeat(22)+'\\n短句'}]),[{row:1,line:1,length:22}]);assert.deepEqual(lineLengths('😀'),[1]);});
 test('trailing source breaks alone do not enable the multiline length limit',()=>{
  assert.deepEqual(longLines([{text:'标题\\n\\n',trans:'字'.repeat(22)}]),[]);

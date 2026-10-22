@@ -1,6 +1,6 @@
 import { api, decode, Github } from './github';
 import { mergeScriptText } from './script-text';
-import { extractInfoFromCsvText, type CsvDataLine } from './upstream/csv';
+import { extractInfoFromCsvText, toCsvText, type CsvDataLine } from './upstream/csv';
 import { type DocTask, validateRowsHtmlTags, WORK_BRANCH, WORK_OWNER, WORK_REPO } from './upstream/workflow';
 
 // Based on upstream buildChineseTxt: replace only text attributes, keeping ADV commands intact.
@@ -28,9 +28,10 @@ export async function taskCsv(w: Github, task: DocTask, stage: ExportStage): Pro
   for (const path of [...new Set(candidates)].filter(Boolean)) {
     try {
       const csv = decode((await w.getContent(WORK_OWNER, WORK_REPO, WORK_BRANCH, path)).content);
-      const errors = validateRowsHtmlTags(extractInfoFromCsvText(csv).data);
+      const parsed = extractInfoFromCsvText(csv);
+      const errors = validateRowsHtmlTags(parsed.data);
       if (errors.length) throw new Error(errors.slice(0, 5).join('；'));
-      return csv;
+      return toCsvText(parsed, { stripTrailingBreaks: true });
     }
     catch (e) { if ((e as { response?: { status: number } }).response?.status !== 404) throw e; }
   }

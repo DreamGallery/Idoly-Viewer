@@ -1,4 +1,5 @@
 import { translationLineLengths, withoutTrailingLineBreaks } from '../../server/idoly-script.mjs';
+export { withoutTrailingLineBreaks };
 // CSV uses literal backslash-n; textarea uses real line breaks.
 export const editorText = (text: string) => text.replace(/\\n/g, '\n').replace(/\r\n?/g, '\n');
 export const csvText = (text: string) => text.replace(/\r\n?|\n/g, '\\n');

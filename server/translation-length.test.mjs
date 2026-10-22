@@ -47,6 +47,16 @@ test('length excludes emphasis and ruby annotation but includes punctuation',()=
  assert.equal(validateTranslation(source,value),'');
  assert.match(validateTranslation(source,value.replace('！','！！')),/22 字/);
 });
+test('trailing empty lines do not appear in counts but internal blank lines still count',()=>{
+ assert.deepEqual(translationLineLengths('甲\\n乙\\n\\n'),[1,1]);
+ assert.deepEqual(translationLineLengths('甲\r\n乙\n \t\n'),[1,1]);
+ assert.deepEqual(translationLineLengths('甲\\n \\n'),[1]);
+ assert.deepEqual(translationLineLengths('甲\\n\\n乙\\n'),[1,0,1]);
+ assert.deepEqual(translationLineLengths('甲 '),[2]);
+ assert.deepEqual(translationLineLengths('\\n\\n'),[0]);
+ assert.equal(validateTranslation('原\\n文','甲\\n乙\\n \t'),'');
+ assert.match(validateTranslation('原\\n文','甲\\n\\n乙\\n'),/换行数量/);
+});
 test('server submission rejects overlong work, including unchanged copies, while draft can be saved',()=>{
  const source='字'.repeat(22)+'\\n原文', raw='[narration text='+source+']';
  const csv=Papa.unparse([

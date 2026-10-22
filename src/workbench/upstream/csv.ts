@@ -1,4 +1,4 @@
-import { csvText } from '../text-format';
+import { csvText, withoutTrailingLineBreaks } from '../text-format';
 import {validateTranslation} from '../idoly-script';
 import Papa from 'papaparse';
 export interface CsvDataLine { id: string; name: string; text: string; trans: string; [key: string]: string }
@@ -11,9 +11,13 @@ export function extractInfoFromCsvText(text: string): CsvTextInfo {
   if (!info) throw new Error('CSV 缺少 info 元数据');
   return { data: records.filter(r => r.id !== 'info' && r.id !== '译者' && r.text), translator: records.find(r => r.id === '译者')?.name || '', jsonUrl: info.name, sourceHash: info.text, records, fields: parsed.meta.fields! };
 }
-export function toCsvText(info: CsvTextInfo): string {
+export function toCsvText(info: CsvTextInfo, { stripTrailingBreaks = false } = {}): string {
   let index = 0;
-  const rows: CsvDataLine[] = info.records.filter(row => row.id !== '译者').map(row => row.id !== 'info' && row.text ? { ...row, trans: csvText(info.data[index++].trans) } : { ...row });
+  const rows: CsvDataLine[] = info.records.filter(row => row.id !== '译者').map(row => {
+    if (row.id === 'info' || !row.text) return { ...row };
+    const trans = csvText(info.data[index++].trans);
+    return { ...row, trans: stripTrailingBreaks ? withoutTrailingLineBreaks(trans) : trans };
+  });
   rows.push({ id: '译者', text: '', trans: '', ...info.records.find(row => row.id === '译者'), name: info.translator });
   return Papa.unparse({ fields: info.fields, data: rows.map(row => info.fields.map(k => row[k] || '')) }, { newline: '\r\n' });
 }
