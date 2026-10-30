@@ -135,7 +135,7 @@ class OriginalRuntimeTests(unittest.TestCase):
             root = Path(directory);master = root/'master';source = root/'source';translations = root/'translations';toolkit = root/'toolkit'
             for path in [master, source/'CSV/card', source/'Resource', translations/'glossary', translations/'master/zh-Hans', toolkit/'src']:
                 path.mkdir(parents=True, exist_ok=True)
-            for table in ['Character', 'CharacterGroup', 'Story', 'StoryPart', 'EventStory', 'ExtraStory', 'LoveStoryEpisode']:
+            for table in ['Character', 'CharacterGroup', 'Card', 'Story', 'StoryPart', 'EventStory', 'ExtraStory', 'ExtraStoryPart', 'LoveStoryEpisode']:
                 (master/(table+'.json')).write_text('[]')
             for file in ['glossary/names.json', 'glossary/terms.json', 'master/zh-Hans/Story.json']:
                 (translations/file).write_text('{}')

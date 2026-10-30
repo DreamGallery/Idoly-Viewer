@@ -13,7 +13,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 TABLES = ('Character', 'CharacterGroup', 'Story', 'StoryPart', 'EventStory',
-          'ExtraStory', 'LoveStoryEpisode', 'Card', 'CardEvolution', 'Skill', 'Music', 'PhotoAllInOne')
+          'ExtraStory', 'ExtraStoryPart', 'LoveStoryEpisode', 'Card', 'CardEvolution', 'Skill', 'Music', 'PhotoAllInOne')
 REPO_PATTERN = re.compile(r'^[\w.-]+/[\w.-]+$')
 
 

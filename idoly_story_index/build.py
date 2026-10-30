@@ -66,7 +66,7 @@ def card_cover_reference(group, story_media):
     return None
 
 
-def event_sort_time(story_ids):
+def event_sort_time(story_ids, asset_id=''):
     """Original story month, not the date of a later permanent/rerun release."""
     months = []
     for sid in story_ids:
@@ -75,7 +75,17 @@ def event_sort_time(story_ids):
             year, month = map(int, match.groups())
             if 1 <= month <= 12:
                 months.append(int(datetime(2000+year, month, 1, tzinfo=timezone.utc).timestamp()*1000))
-    return min(months) if months else None
+    if months:
+        return min(months)
+    # Some events reuse main-story script names, without a CSV month code.
+    match = re.search(r'-(\d{2})-(\d{2})(\d{2})(?:-|$)', asset_id)
+    if match:
+        year, month, day = map(int, match.groups())
+        try:
+            return int(datetime(2000+year, month, day, tzinfo=timezone.utc).timestamp()*1000)
+        except ValueError:
+            pass
+    return None
 
 
 def timing(line):
@@ -364,9 +374,10 @@ def build(master, toolkit, source, translations, output, report=ROOT/'reports/id
     for key in nodes['hbd']['children']:
         nodes[key]['children'].sort(key=lambda child: ':userhbd:' not in child)
     # Sort only the top-level event/card entries; episode and supplement order stays intact.
+    event_assets = {event['id']:event['assetId'] for table in ['EventStory','ExtraStory'] for event in tables[table]}
     for parent in ['event:normal', 'event:love']:
         for key in nodes[parent]['children']:
-            nodes[key]['sortTime']=event_sort_time(nodes[key]['stories'])
+            nodes[key]['sortTime']=event_sort_time(nodes[key]['stories'], event_assets.get(key,''))
     active={k:v for k,v in nodes.items() if v.get('count')}
     assert sum(len(n['stories']) for n in active.values())==len(catalog['stories'])
     provenance={'masterTables':{n:hashlib.sha256((master/(n+'.json')).read_bytes()).hexdigest() for n in tables},'catalogSha256':hashlib.sha256((output/'catalog.json').read_bytes()).hexdigest(),'manifestSha256':hashlib.sha256((toolkit/'cache/OctoManifest.json').read_bytes()).hexdigest()}

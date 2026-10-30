@@ -19,7 +19,7 @@
     "data:package": "node scripts/package-idoly-resources.mjs",
     "test:corpus": "python3 scripts/verify-toolkit-merge.py && node scripts/verify-idoly-data.mjs",
     "index:build": "python3 -m idoly_story_index.build",
-    "test:index": "python3 -m unittest discover -s tests -p test_idoly_index.py -v",
+    "test:index": "python3 -m unittest discover -s tests -p test_idoly_index.py -v && python3 -m unittest discover -s tests -p test_story_ownership.py -v",
     "test:card-filters": "esbuild src/card-filters.test.ts --bundle --platform=node --format=esm --outfile=.test-build/card-filters.test.js && node --test .test-build/card-filters.test.js",
     "test:updates": "python3 -m unittest discover -s tests -p test_idoly_text_updates.py -v && esbuild src/text-updates.test.ts --bundle --platform=node --format=esm --outfile=.test-build/text-updates.test.js && node --test .test-build/text-updates.test.js",
     "dev:api:github": "node server/github.mjs",
