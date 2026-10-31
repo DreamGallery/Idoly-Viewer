@@ -20,6 +20,7 @@ import {buildVoiceMap} from './voice-map';
 import { draftStorageKey, prepareLoginDraft, restoreBrowserDraft, type BrowserDraft } from './browser-drafts';
 import { ConfirmationDialog, type ConfirmationOptions } from './ConfirmationDialog';
 import { editorText } from './text-format';
+import { CreateStoryTask } from './CreateStoryTask';
 
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 const taskTimestamp = (value?: string) => Date.parse(value || '') || 0;
@@ -29,6 +30,12 @@ const publishedDate = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shangha
 function download(text: string, name: string) {
   const url = URL.createObjectURL(new Blob(['\uFEFF', text], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function ActionStatus({ processing, notice = '' }: { processing: boolean; notice?: string }) {
+  return <p className="work-action-status" role="status">
+    <span className="work-notice" aria-hidden={processing}>{notice || '\u00a0'}</span>
+    <span aria-hidden={!processing}>正在处理…</span>
+  </p>;
 }
 export function Login({ auth, refresh, beforeLogin }: { auth: Auth | null; refresh: (animate?: boolean) => void; beforeLogin?: () => void }) {
   const [error, setError] = useState(''),[localName,setLocalName]=useState('');
@@ -210,6 +217,7 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
   const latestDoc = useRef(doc), busyRef = useRef(false);
   const [draftLoaded, setDraftLoaded] = useState(false), [sourceConfirmed, setSourceConfirmed] = useState(false);
   const [sourceReview, setSourceReview] = useState<{hash:string; archives:string[]} | null>(null);
+  const [taskCreation, setTaskCreation] = useState<'open' | 'closed' | null>(null);
   const [confirmation, setConfirmation] = useState<ConfirmationOptions | null>(null);
   const pendingConfirmation = useRef<((confirmed: boolean) => void) | null>(null);
   const restoreActionFocus = useRef(false);
@@ -255,7 +263,7 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     setDoc(null); setDocumentOwner(null); setChanged(false); setRemoteReady(false); setDraftLoaded(false);
     setSearch(''); setRowFilter(allEditorRows);
     setRemoteLabel('原文');
-    setTask(null); setSourceReview(null); setSourceConfirmed(false); setNotice(''); setError(''); setDraftAvailable(null); setDraftBackups([]);
+    setTask(null); setTaskCreation(null); setSourceReview(null); setSourceConfirmed(false); setNotice(''); setError(''); setDraftAvailable(null); setDraftBackups([]);
     wrapper.current = null; source.current = null;
     api<{ csv: string; sha256: string }>('original/' + encodeURIComponent(scriptId)).then(s => {
       if (!active || generation !== generationCounter.current) return;
@@ -315,7 +323,12 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     const w = new Github(auth);
     const matches = await api<Issue[]>('github/read', { kind: 'findIssue', scriptId }, auth.csrf); const found = matches[0] && docFromIssue(matches[0]);
     if (generation !== sourceGeneration.current) return;
-    if (!found) throw new Error('工作仓库尚未建立本章节任务；可以先本地编辑并导出 CSV');
+    if (!found) {
+      if (auth.local) setNotice('本地协作测试中没有此章节任务；可以先本地编辑并导出 CSV');
+      else setTaskCreation('open');
+      return;
+    }
+    setTaskCreation(null);
     generation = ++sourceGeneration.current;
     const currentSource = await api<{csv:string;sha256:string;path:string}>('collaboration/source/'+encodeURIComponent(scriptId));
     if (generation !== sourceGeneration.current) return;
@@ -447,7 +460,7 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
     {canCollaborate && draftBackups.length > 0 && <div className="work-toolbar">{draftBackups.map((draft, i) => <button key={i} onClick={() => download(draft.csv, `${scriptId}-保留草稿-${i + 1}.csv`)}>下载保留草稿{draftBackups.length > 1 ? ` ${i + 1}` : ''}</button>)}</div>}
     {auth?.canCollaborate && <div className="work-collaboration"><div className="work-toolbar"><select aria-label="协作工序" value={role} disabled={busy} onChange={e => { setRole(e.target.value as TrackKey); setRevising(false); setRemoteReady(false); setDraftLoaded(false); }}><option value="tr">翻译</option><option value="pr">校对</option></select>{remoteReady && task && <><button disabled={busy || !auth?.user || task[role].state !== '待认领'} onClick={() => run(claim)}>认领{role === 'tr' ? '翻译' : '校对'}</button>{task[role].state === '完成' && !revising && <button disabled={busy || !auth?.user} onClick={() => setRevising(true)}>修订{role === 'tr' ? '翻译' : '校对'}</button>}</>}<button disabled={busy || remoteReady} onClick={() => run(connect)}>{remoteReady ? '已连接任务' : '连接协作任务'}</button>{task && !auth?.local && <a href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/issues/${task.number}`} target="_blank" rel="noreferrer">任务 #{task.number}</a>}</div>
     {remoteReady && task && <><p>翻译：{task.tr.state} {task.tr.user.trim() || '—'} / 校对：{task.pr.state} {task.pr.user.trim() || '—'}</p><div className="work-toolbar">{(['ai', 'translated', 'proofread', 'draft'] as const).map((s, i) => <button disabled={busy} key={s} onClick={() => run(() => loadStage(s))}>{['载入机器译文', '载入翻译稿', '载入校对稿', '恢复远端草稿'][i]}</button>)}</div>{active?.blocked && <p>{active.blockMsg}</p>}</>}
-    </div>}{error && <p className="work-error" role="alert">{error}</p>}{notice && <p className="work-notice" role="status">{notice}</p>}{processing && <p role="status">正在处理…</p>}
+    </div>}{error && <p className="work-error" role="alert">{error}</p>}<ActionStatus processing={processing} notice={notice} />
     {voices?.source_sha256 && sourceHash && voices.source_sha256 !== sourceHash && <p className="work-notice">原文版本与语音索引不一致，请更新索引后播放。</p>}
     {canCollaborate && sourceReview && <div className="work-notice"><p>原文已更新，请核对保留的译文。{sourceReview.archives.map((path,i) => <a key={path} href={`https://github.com/${WORK_OWNER}/${WORK_REPO}/blob/${WORK_BRANCH}/${path}`} target="_blank" rel="noreferrer"> 旧稿 {i+1}</a>)}</p><label><input type="checkbox" checked={sourceConfirmed} onChange={e => setSourceConfirmed(e.target.checked)} /> 已核对当前原文及迁移译文</label></div>}
     {visibleDoc ? <><div className="work-toolbar">
@@ -465,7 +478,10 @@ export function ChapterWorkbench({ scriptId, voices, idolyVoices }: { scriptId: 
       <span>编辑自动保存到此浏览器；上传需点击「保存 GitHub 草稿」</span>
     </div><div className="work-rows">{rows?.map(({ row, i }) => <TranslationRow key={i} row={row} index={i} clips={voiceMap.get(i)?.clips} disabled={busy} onChange={editRow} onPlay={playVoice} />)}</div></> : !error && animateLoading && <PageLoading/>}
     {visibleDoc && canCollaborate && <footer className="work-editor-actions">{remoteReady && task && <div className="work-toolbar"><button disabled={busy || active?.activeRole !== role} onClick={() => run(() => submit(false))}>{auth?.local?'保存本地协作草稿':'保存 GitHub 草稿'}</button><button className="work-primary" disabled={busy || active?.activeRole !== role} onClick={() => run(() => submit(true))}>完成{role === 'tr' ? '翻译' : '校对'}</button></div>}
-{error && <p className="work-error" role="alert">{error}</p>}{processing && <p role="status">正在处理…</p>}</footer>}
+{error && <p className="work-error" role="alert">{error}</p>}<ActionStatus processing={processing} /></footer>}
+    {auth?.canCollaborate && !auth.local && taskCreation !== null && <CreateStoryTask key={scriptId + readerIdentity}
+      scriptId={scriptId} auth={auth} disabled={busy} open={taskCreation === 'open'} onClose={() => setTaskCreation('closed')}
+      onReady={() => { setTaskCreation('closed'); return run(connect); }} />}
     {confirmation && <ConfirmationDialog {...confirmation} onResolve={resolveConfirmation} />}
   </section>;
 }

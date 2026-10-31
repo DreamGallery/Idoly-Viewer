@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createApp } from './app.mjs';
+import { storyTaskGroup } from './story-task.mjs';
 const origin = 'http://127.0.0.1:5173';
 async function fixture(t, extra = async () => new Response('{}', {status:404}), push = true, services = {}) {
   const calls=[];
@@ -92,6 +93,94 @@ test('anonymous task requests are denied, including direct issue lookup',async t
 test('logged-in read-only account cannot view tasks or submit changes',async t=>{const f=await fixture(t,undefined,false);const status=await(await fetch(f.base+'/api/auth/status',{headers:{Cookie:f.cookie}})).json();assert.equal(status.canCollaborate,false);for(const kind of ['issues','issue','findIssue']){assert.equal((await f.post('/api/github/read',{kind,number:1,scriptId:'test'})).status,403);}assert.equal((await f.post('/api/github/commit',{})).status,403);});
 test('writer can list tasks',async t=>{const f=await fixture(t,async()=>Response.json([{number:1,title:'test'}]));assert.equal((await f.post('/api/github/read',{kind:'issues'})).status,200);});
 
+const taskDirectory = {
+ roots:['event'], nodes:{event:{id:'event',parent:null,children:['event:test'],stories:[]},
+ 'event:test':{id:'event:test',label:'测试活动',parent:'event',children:[],stories:['adv_main_04_15_01','adv_main_04_15_02']}},
+ stories:{adv_main_04_15_01:{group:'event:test',indexVisible:true},adv_main_04_15_02:{group:'event:test',indexVisible:true}},
+};
+const taskServices = {readFile:async(_root,path)=>{assert.equal(path,'data/directory.json');return JSON.stringify(taskDirectory);}};
+const taskInput = {scriptId:'adv_main_04_15_01',groupSha:storyTaskGroup(taskDirectory,'adv_main_04_15_01').sha};
+
+test('group task creation requires login, CSRF and repository write access before reading sources',async t=>{
+ for (const push of [true,false]) {
+  const f=await fixture(t,async()=>assert.fail('Unauthorized task request must not reach Actions'),push,
+    {readFile:async()=>assert.fail('Unauthorized task request must not read resources')});
+  assert.equal((await f.post('/api/github/task',taskInput,{Cookie:''})).status,401);
+  assert.equal((await f.post('/api/github/task',taskInput,{'X-CSRF-Token':''})).status,403);
+  assert.equal((await f.post('/api/github/task',taskInput,{Origin:'https://other.test'})).status,403);
+  if(!push) {
+   assert.equal((await f.post('/api/github/task',taskInput)).status,403);
+   for(const kind of ['taskRun','taskGroup'])assert.equal((await f.post('/api/github/read',{kind,runId:42,scriptId:taskInput.scriptId})).status,403);
+  }
+ }
+});
+
+test('group task creation rejects arbitrary targets, short scripts, missing chapters and stale groups',async t=>{
+ const f=await fixture(t,async()=>assert.fail('Invalid request must not reach Actions'),true,taskServices);
+ for(const input of [{...taskInput,scriptId:'../private'}, {...taskInput,scriptId:'adv_demo_short'},
+   {...taskInput,ref:'other'}, {...taskInput,workflow:'release.yml'}, {...taskInput,filenames:['adv_unrelated.csv']},
+   {...taskInput,owner:'other'}, {...taskInput,scriptId:[]}, {...taskInput,scriptId:'adv_'+'a'.repeat(200)}]) {
+  assert.equal((await f.post('/api/github/task',input)).status,400);
+ }
+ assert.equal((await f.post('/api/github/task',{...taskInput,scriptId:'adv_missing'})).status,404);
+ assert.equal((await f.post('/api/github/task',{...taskInput,groupSha:'outdated'})).status,409);
+});
+
+test('group preview and dispatch use the server index and never upload browser edits',async t=>{
+ let dispatches=0;
+ const f=await fixture(t,async(url,opts)=>{
+  if(url.includes('/actions/runs?'))return Response.json({workflow_runs:[]});
+  if(url.endsWith('/story-task.yml/dispatches')){
+   dispatches++;
+   assert.equal(opts.headers.Authorization,'Bearer private-token');
+   assert.equal(opts.headers['X-GitHub-Api-Version'],'2026-03-10');
+   assert.deepEqual(JSON.parse(opts.body),{ref:'main',inputs:{filenames:JSON.stringify(['adv_main_04_15_01.csv','adv_main_04_15_02.csv'])}});
+   return Response.json({workflow_run_id:42,html_url:'https://untrusted.test/ignored'});
+  }
+  assert.fail('Unexpected GitHub request: '+url);
+ },true,taskServices);
+ assert.deepEqual(await(await f.post('/api/github/read',{kind:'taskGroup',scriptId:taskInput.scriptId})).json(),{
+  id:'event:test',label:'测试活动',count:2,sha:taskInput.groupSha,
+ });
+ const responses=await Promise.all([f.post('/api/github/task',taskInput),f.post('/api/github/task',{...taskInput,scriptId:'adv_main_04_15_02'})]);
+ for(const response of responses){assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');assert.deepEqual(await response.json(),{state:'requested',runId:42,url:'https://github.com/DreamGallery/Idoly-localify-translations/actions/runs/42'});}
+ assert.equal(dispatches,1);
+ assert.ok(!f.calls.some(([url])=>/\/git\/|\/contents\//.test(url)));
+});
+
+test('queued task workflow is reported without dispatching another group',async t=>{
+ const f=await fixture(t,async url=>{
+  if(url.includes('/actions/runs?'))return Response.json({workflow_runs:[{id:43,status:'queued',path:'.github/workflows/release.yml'}]});
+  assert.fail('Do not replace an existing pending workflow');
+ },true,taskServices);
+ assert.deepEqual(await(await f.post('/api/github/task',taskInput)).json(),{
+  state:'busy',runId:43,url:'https://github.com/DreamGallery/Idoly-localify-translations/actions/runs/43',status:'queued',conclusion:null,
+ });
+});
+
+test('task progress exposes only the fixed workflow and preserves failure conclusions',async t=>{
+ let run={id:42,path:'.github/workflows/story-task.yml',event:'workflow_dispatch',head_branch:'main',status:'completed',conclusion:'failure'};
+ const f=await fixture(t,async url=>{assert.ok(url.endsWith('/actions/runs/42'));return Response.json(run);});
+ const result=await f.post('/api/github/read',{kind:'taskRun',runId:42});
+ assert.equal(result.status,200);assert.equal((await result.json()).conclusion,'failure');
+ run={...run,path:'.github/workflows/unrelated.yml'};
+ assert.equal((await f.post('/api/github/read',{kind:'taskRun',runId:42})).status,403);
+ assert.equal((await f.post('/api/github/read',{kind:'taskRun',runId:'../other'})).status,400);
+});
+
+test('failed dispatch can be retried and legacy accepted responses are not reported as completed',async t=>{
+ let attempts=0;
+ const f=await fixture(t,async(url)=>{
+  if(url.includes('/actions/runs?'))return Response.json({workflow_runs:[]});
+  if(url.endsWith('/dispatches'))return ++attempts===1?Response.json({}, {status:403}):new Response(null,{status:204});
+  assert.fail('Unexpected request');
+ },true,taskServices);
+ assert.equal((await f.post('/api/github/task',taskInput)).status,403);
+ assert.deepEqual(await(await f.post('/api/github/task',taskInput)).json(),{
+  state:'requested',runId:null,url:'https://github.com/DreamGallery/Idoly-localify-translations/actions/workflows/story-task.yml',
+ });
+});
+
 test('anonymous and read-only users cannot read any collaboration layer or published translations',async t=>{
  const paths=['story/ai/card/test.csv','story/human/card/test.csv','story/reviewed/card/test.csv','story/drafts/translation/card/test.csv','story/drafts/proofread/card/test.csv','records/test.json','proofread_txt/test.txt'];
  for(const push of [false,true]) {
@@ -124,13 +213,14 @@ test('collaborators read approved data paths but not arbitrary repository files'
  assert.equal(files,5);
 });
 
-async function requestProbe({path='/api/github/read',method='POST',cookie='',csrf='csrf',push=true,chunks=['{}'],length,contentType='application/json',requestOrigin=origin}={}) {
+async function requestProbe({path='/api/github/read',method='POST',cookie='',csrf='csrf',push=true,chunks=['{}'],length,contentType='application/json',requestOrigin=origin,services={}}={}) {
  let reads=0,sessionReads=0,permissionChecks=0;
- const session={expires:Date.now()+60000,token:'test-token',csrf:'csrf'};
+ const session={expires:Date.now()+60000,token:'test-token',csrf:'csrf',user:{login:'Tester'}};
  const app=createApp({CAMPUS_PUBLIC_ORIGIN:origin},async()=>{permissionChecks++;return Response.json({permissions:{push}});},{
   resourceRequest:async()=>false,
   sessions:{get:async id=>{sessionReads++;return id==='valid'?session:undefined;}},
   sourceCsv:async()=>({csv:'id,name,text,trans\n1:text:1,A,原文,private'}),
+  ...services,
  });
  const headers={origin:requestOrigin,cookie,'x-csrf-token':csrf,'content-type':contentType,...(length===undefined?{}:{'content-length':String(length)})};
  const req={method,url:path,headers,iterator:async function*(){for(const chunk of chunks){reads+=Buffer.byteLength(chunk);yield Buffer.from(chunk);}}};
@@ -165,6 +255,59 @@ test('small query limit also applies to chunked bodies and JSON must be an objec
 test('public original reading never queries the session store, even with an unrelated cookie',async()=>{
  const result=await requestProbe({path:'/api/original/adv_test',method:'GET',cookie:'idoly_session=valid'});
  assert.equal(result.status,200);assert.equal(result.sessionReads,0);assert.equal(result.permissionChecks,0);assert.ok(!result.body.includes('private'));
+});
+
+test('task IP throttling rejects before session, GitHub and body reads, including changed query strings',async()=>{
+ let checks=0;
+ const services={allowTaskIp:async()=>{checks++;return false;},allowTaskUser:async()=>assert.fail('IP denial must stop user lookup')};
+ for(const path of ['/api/github/task','/api/github/task?nonce=changed']) {
+  const result=await requestProbe({path,cookie:'idoly_session=valid',chunks:['x'.repeat(1024*1024)],services});
+  assert.equal(result.status,429);assert.equal(result.headers['Retry-After'],'60');assert.equal(result.headers['Cache-Control'],'no-store');
+  assert.equal(result.sessionReads,0);assert.equal(result.permissionChecks,0);assert.equal(result.reads,0);
+ }
+ assert.equal(checks,2);
+});
+
+test('task user throttling uses the authenticated login before GitHub permission queries or body reads',async()=>{
+ const checks=[];
+ const result=await requestProbe({path:'/api/github/task',cookie:'idoly_session=valid',chunks:['{"login":"other-user"}'],services:{
+  allowTaskIp:async()=>{checks.push('ip');return true;},
+  allowTaskUser:async login=>{checks.push(login);return false;},
+ }});
+ assert.deepEqual(checks,['ip','tester']);assert.equal(result.status,429);
+ assert.equal(result.headers['Retry-After'],'60');assert.equal(result.headers['Cache-Control'],'no-store');
+ assert.equal(result.sessionReads,1);assert.equal(result.permissionChecks,0);assert.equal(result.reads,0);
+});
+
+test('task quotas do not replace authentication, CSRF or write permission checks',async()=>{
+ let users=0;
+ const services={allowTaskIp:async()=>true,allowTaskUser:async()=>{users++;return true;}};
+ for(const [options,status] of [[{},401],[{cookie:'idoly_session=valid',csrf:'wrong'},403]]) {
+  const result=await requestProbe({path:'/api/github/task',services,...options});
+  assert.equal(result.status,status);assert.equal(result.reads,0);assert.equal(result.permissionChecks,0);
+ }
+ assert.equal(users,0);
+ const readOnly=await requestProbe({path:'/api/github/task',cookie:'idoly_session=valid',push:false,services});
+ assert.equal(readOnly.status,403);assert.equal(readOnly.permissionChecks,1);assert.equal(readOnly.reads,0);assert.equal(users,1);
+});
+
+test('task throttling only applies to creation, not task queries or unrelated endpoints',async()=>{
+ const services={allowTaskIp:async()=>assert.fail('Not a task creation request'),allowTaskUser:async()=>assert.fail('Not a task creation request')};
+ for(const [path,method,status] of [['/api/health','GET',200],['/api/github/task','GET',404],['/api/github/read','POST',400]]) {
+  assert.equal((await requestProbe({path,method,cookie:'idoly_session=valid',services})).status,status);
+ }
+});
+
+test('a failed task limiter cannot fall through to GitHub or consume the body',async()=>{
+ for(const stage of ['ip','user']) {
+  const unavailable=async()=>{throw Object.assign(Error('限流服务暂不可用'),{status:503});};
+  const result=await requestProbe({path:'/api/github/task',cookie:'idoly_session=valid',services:{
+   allowTaskIp:stage==='ip'?unavailable:async()=>true,
+   allowTaskUser:stage==='user'?unavailable:async()=>assert.fail('IP failure must stop user lookup'),
+  }});
+  assert.equal(result.status,503);assert.equal(result.sessionReads,stage==='ip'?0:1);
+  assert.equal(result.permissionChecks,0);assert.equal(result.reads,0);
+ }
 });
 
 test('login limiting runs before session access and OAuth writes, and only applies to the login endpoint',async()=>{

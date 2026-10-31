@@ -132,6 +132,38 @@ test('actual Workers runtime serves SPA, Node API, R2 text, OAuth state and logo
 });
 
 
+test('Worker task quotas isolate IPs and keep the same user quota across sessions and IPs',async()=>{
+  const secret='task-rate-test-secret-'.repeat(4), origin='http://127.0.0.1:8788';
+  const harness=createTestHarness({workers:[{configPath:'wrangler.jsonc',secrets:{SESSION_SECRET:secret}}]});
+  try {
+    await harness.listen();
+    const env=await harness.getWorker().getEnv();
+    await env.DB.exec((await readFile(new URL('./migrations/0001_sessions.sql',import.meta.url),'utf8')).replace(/\n/g,' '));
+    const post=(ip,headers={},query='')=>harness.fetch(origin+'/api/github/task'+query,{method:'POST',
+      headers:{Origin:origin,'Content-Type':'application/json','CF-Connecting-IP':ip,...headers},body:'{}'});
+    for(let i=0;i<10;i++)assert.equal((await post('192.0.2.30')).status,401);
+    const ipDenied=await post('192.0.2.30',{Cookie:'idoly_session=unrelated'},'?nonce=changed');
+    assert.equal(ipDenied.status,429);assert.equal(ipDenied.headers.get('Retry-After'),'60');
+    assert.equal(ipDenied.headers.get('Cache-Control'),'no-store');
+    assert.equal((await post('192.0.2.31')).status,401,'another IP has a separate quota');
+
+    // Consume the real local binding quota without making any GitHub requests.
+    for(let i=0;i<3;i++)assert.equal((await env.TASK_USER_RATE_LIMITER.limit({key:'idoly:task:user:rate-tester'})).success,true);
+    const sessions=sessionStore(env.DB,secret,'session');
+    for(const [sid,login] of [['first-session','Rate-Tester'],['second-session','rate-tester']]) {
+      await sessions.set(sid,{token:'test-token',user:{login},csrf:'test-csrf',expires:Date.now()+60000});
+    }
+    for(const [ip,sid] of [['192.0.2.32','first-session'],['192.0.2.33','second-session']]) {
+      const denied=await post(ip,{Cookie:'idoly_session='+sid,'X-CSRF-Token':'test-csrf'});
+      assert.equal(denied.status,429,'re-login, username casing and IP changes do not reset the user quota');
+      assert.equal(denied.headers.get('Retry-After'),'60');
+      assert.equal(denied.headers.get('Cache-Control'),'no-store');
+    }
+    assert.equal((await env.TASK_USER_RATE_LIMITER.limit({key:'idoly:task:user:another-user'})).success,true);
+    assert.equal((await harness.fetch(origin+'/api/health')).status,200);
+  } finally {await harness.close();}
+});
+
 test('content-addressed release maps serve CSV, TXT and catalog; older releases still work',()=>fixture(async bucket=>{
   const data=resources({RESOURCES:bucket,CAMPUS_R2_PREFIX:'mapped'});
   const csv='text/'+'a'.repeat(64)+'/demo.csv', txt='text/'+'b'.repeat(64)+'/demo.txt', catalog='text/'+'c'.repeat(64)+'/manifest.json';

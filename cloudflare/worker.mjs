@@ -11,6 +11,8 @@ const server = createApp(env, fetch, {
   sessions: sessionStore(env.DB, env.SESSION_SECRET, 'session'),
   pending: sessionStore(env.DB, env.SESSION_SECRET, 'oauth'),
   allowLogin: async req => (await env.LOGIN_RATE_LIMITER.limit({key:'idoly:login:'+(req.headers['cf-connecting-ip'] || 'unknown')})).success,
+  allowTaskIp: async req => (await env.TASK_IP_RATE_LIMITER.limit({key:'idoly:task:ip:'+(req.headers['cf-connecting-ip'] || 'unknown')})).success,
+  allowTaskUser: async login => (await env.TASK_USER_RATE_LIMITER.limit({key:'idoly:task:user:'+login})).success,
   sourceRoots: data.sourceRoots,
   sourceCsv: data.sourceCsv,
   readFile: data.readFile,

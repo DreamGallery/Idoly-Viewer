@@ -2,6 +2,7 @@ import {inspectCsv,validateCsvAgainstScript} from './validate-csv.mjs';
 import {collaborationSources,validateSourceConfirmation} from './collaboration.mjs';
 import {originalCsv} from './public-story.mjs';
 import { resourceRequest } from './resources.mjs';
+import { storyTaskActions, storyTaskGroup } from './story-task.mjs';
 import { createServer } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
@@ -15,6 +16,7 @@ const postLimits = new Map([
   ['/api/github/read', 32 * 1024],
   ['/api/github/issue', 512 * 1024],
   ['/api/github/commit', 6 * 1024 * 1024],
+  ['/api/github/task', 1024],
 ]);
 export function createApp(env = process.env, remoteFetch = fetch, services = {}) {
   const origin = new URL(env.CAMPUS_PUBLIC_ORIGIN || 'http://127.0.0.1:5173').origin;
@@ -24,14 +26,15 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
   const cookieName = 'idoly_session';
   const cookie = (name, value, age) => `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${origin.startsWith('https:') ? '; Secure' : ''}`;
   const clean = () => { for (const map of [sessions, pending]) for (const [key, val] of (map instanceof Map ? map : [])) if (val.expires < Date.now()) map.delete(key); };
-  async function gh(session, method, path, body) {
+  async function gh(session, method, path, body, apiVersion = '2022-11-28') {
     const response = await remoteFetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}${path ? '/' + path : ''}`, {
-      method, headers: { 'User-Agent': 'Campus-Story-Viewer', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(session ? { Authorization: `Bearer ${session.token}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      method, headers: { 'User-Agent': 'Campus-Story-Viewer', Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': apiVersion, ...(session ? { Authorization: `Bearer ${session.token}` } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000), redirect: 'manual',
     });
     if (!response.ok) throw fail(response.status, response.status === 404 ? 'GitHub 中没有此文件或任务' : response.status === 403 ? 'GitHub 拒绝操作：请检查仓库权限或 API 限额' : response.status === 409 || response.status === 422 ? '远端已变化，请重新加载后合并修改' : `GitHub 请求失败（${response.status}）`);
     return response.status === 204 ? null : response.json();
   }
+  const taskActions = storyTaskActions(gh, owner, repo);
   async function canCollaborate(session) {
     if (!session) return false;
     try { const repoInfo = await gh(session, 'GET', ''); return repoInfo.permissions?.push === true && !repoInfo.archived; }
@@ -87,6 +90,12 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
       const postLimit = localLogin ? 1024 : postLimits.get(url.pathname);
       if (req.method === 'POST' && !postLimit) throw fail(404, '接口不存在');
       if (req.method === 'POST' && req.headers.origin !== origin) throw fail(403, '请求来源不匹配');
+      const taskRequest = req.method === 'POST' && url.pathname === '/api/github/task';
+      // Reject bursts before looking up sessions or reading request bodies.
+      if (taskRequest && services.allowTaskIp && !await services.allowTaskIp(req)) {
+        res.setHeader('Retry-After', '60');
+        throw fail(429, '创建任务请求过于频繁，请稍后重试');
+      }
       if (url.pathname === '/api/health' && req.method === 'GET') return json({ ok: true });
       if (url.pathname === '/api/resources/status' && req.method === 'GET') {
         if (services.status) return json(await services.status());
@@ -101,6 +110,10 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
         try { release = await realpath(resolve(env.CAMPUS_RUNTIME_ROOT, 'current')); }
         catch (e) { if (e.code === 'ENOENT') throw fail(503, '资源尚未初始化完成'); throw e; }
         return { web: resolve(release, 'web'), story: resolve(release, 'story'), adv: resolve(release, 'adv') };
+      }
+      async function taskGroup(id) {
+        const roots = await sourceRoots();
+        return storyTaskGroup(JSON.parse(await localFile(roots.web, 'data/directory.json')), id);
       }
       const cookies = Object.fromEntries((req.headers.cookie || '').split(';').map(x => x.trim().split('=')));
       const needsSession = !localLogin && (req.method === 'POST' || url.pathname === '/api/auth/status' || url.pathname.startsWith('/api/source/') || url.pathname.startsWith('/api/collaboration/') || (url.pathname.startsWith('/api/script/') && url.searchParams.get('work') === '1'));
@@ -200,14 +213,28 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
       if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || '')) throw fail(415, '请使用 JSON 请求');
       const length = req.headers['content-length'];
       if (length !== undefined && (!/^\d+$/.test(length) || !Number.isSafeInteger(Number(length)) || Number(length) > postLimit)) throw fail(413, '请求过大');
+      if (taskRequest && services.allowTaskUser) {
+        const login = session?.user?.login;
+        if (typeof login !== 'string' || !login) throw fail(401, '请重新登录 GitHub');
+        // Use the verified session identity, never an input or a client header.
+        if (!await services.allowTaskUser(login.toLowerCase())) {
+          res.setHeader('Retry-After', '60');
+          throw fail(429, '创建任务请求过于频繁，请稍后重试');
+        }
+      }
       if (!localLogin && url.pathname !== '/api/auth/logout') await requireCollaborator(session);
-      if (env.CAMPUS_COLLABORATION_MAINTENANCE === '1' && ['/api/github/issue','/api/github/commit'].includes(url.pathname)) throw fail(503, '协作分支正在切换，暂时无法远端保存；请保留浏览器草稿，稍后重新连接');
+      if (env.CAMPUS_COLLABORATION_MAINTENANCE === '1' && ['/api/github/issue','/api/github/commit','/api/github/task'].includes(url.pathname)) throw fail(503, '协作分支正在切换，暂时无法远端保存；请保留浏览器草稿，稍后重新连接');
       const input = await bodyOf(req, postLimit);
       if (localLogin) {
         if (typeof input.login !== 'string' || !/^[a-zA-Z0-9_-]{2,32}$/.test(input.login)) throw fail(400,'本地名字需要 2–32 个英文字母、数字或下划线');
         const sid=random();await sessions.set(sid,{token:'local-only',user:{login:input.login,name:input.login},csrf:random(),expires:Date.now()+28800000});res.setHeader('Set-Cookie',cookie(cookieName,sid,28800));return json({ok:true});
       }
       if (url.pathname === '/api/auth/logout') { await sessions.delete(cookies[cookieName]); res.setHeader('Set-Cookie', cookie(cookieName, '', 0)); return json({ ok: true }); }
+      if (url.pathname === '/api/github/task') {
+        if (services.localAuth) throw fail(409, '本地协作测试不会触发 GitHub Actions');
+        if (Object.keys(input).some(key => !['scriptId','groupSha'].includes(key))) throw fail(400, '只接受当前剧情编号及分组版本');
+        return json(await taskActions.create(session, await taskGroup(input.scriptId), input.groupSha));
+      }
       if (url.pathname === '/api/github/read') {
         if (input.kind === 'findIssue') {
           if (!/^[\w-]+$/.test(input.scriptId || '')) throw fail(400, '无效章节');
@@ -216,6 +243,11 @@ export function createApp(env = process.env, remoteFetch = fetch, services = {})
           if (!response.ok) throw fail(response.status, '任务查询失败，请检查 GitHub 限额或稍后重试');
           const result = await response.json();
           return json(result.items.filter(i => i.title === input.scriptId));
+        }
+        if (input.kind === 'taskRun') return json(await taskActions.status(session, input.runId));
+        if (input.kind === 'taskGroup') {
+          const {id,label,count,sha} = await taskGroup(input.scriptId);
+          return json({id,label,count,sha});
         }
         if (input.kind === 'content') {
           filePath(input.path);
